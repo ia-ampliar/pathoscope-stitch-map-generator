@@ -1,0 +1,14 @@
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.interrogate]
+ignore = ["**/__init__.py", "tests/*", "migrations/*"]
+exclude = ["__pycache__", ".*"]
+fail_under = 80
+ignore_init_method = true
+ignore-init-module = true
+ignore-module = true
+verbosity = 2
