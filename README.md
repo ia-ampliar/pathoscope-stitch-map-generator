@@ -1,0 +1,1 @@
+# pathoscope-stitch-map-generator
