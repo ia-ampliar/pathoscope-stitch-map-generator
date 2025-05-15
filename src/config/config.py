@@ -14,5 +14,9 @@ class Config:
     BASE_DIR: Path = Path("output")
     TILES_DIR: Path = BASE_DIR / "tiles"
 
+    # Onde as imagens classificadas serão salvas
+    CLASSIFIED_DIR: Path = BASE_DIR / "tmp" / "classified"
+
     # Arquivos
     METADATA_FILE: Path = BASE_DIR / "metadata" / "dataset.json"
+    VALID_TILES_FILE: Path = BASE_DIR / "metadata" / "valid_tiles.json"
