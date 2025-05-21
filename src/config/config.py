@@ -35,3 +35,9 @@ class Config:
     MATCHER: str = "bf"
     MATCHING_RATIO_THRESH: float = 0.5
     MATCHING_N_JOBS = -1
+
+    # Etapa de criação do canvas
+    CANVAS_OUTPUT_PATH: Path = BASE_DIR / "tmp" / "canvas"
+    BLANK_CANVAS_PATH: Path = CANVAS_OUTPUT_PATH / "canvas.dat"
+    CANVAS_CHUNK_SIZE: tuple = (1000, 1000, 3)  # Ajuste conforme seu hardware
+    CANVAS_GAP: int = 100
