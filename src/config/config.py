@@ -40,4 +40,6 @@ class Config:
     CANVAS_OUTPUT_PATH: Path = BASE_DIR / "tmp" / "canvas"
     BLANK_CANVAS_PATH: Path = CANVAS_OUTPUT_PATH / "canvas.dat"
     CANVAS_CHUNK_SIZE: tuple = (1000, 1000, 3)  # Ajuste conforme seu hardware
+    CANVAS_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_shape.npy"
+    CANVAS_POPULATED_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_populated.tif"
     CANVAS_GAP: int = 100
