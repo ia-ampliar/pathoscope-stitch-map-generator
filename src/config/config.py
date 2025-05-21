@@ -23,3 +23,9 @@ class Config:
 
     # Grafo
     GRAPH_FILE: Path = BASE_DIR / "result" / "graph.jpg"
+
+    # Etapa de detecção de keypoints
+    DETECTION_ALGORITHM: str = "orb"
+    DETECTION_N_JOBS: int = -1
+    FEATURES_DIR: Path = BASE_DIR / "features"
+    KEYPOINTS_ZARR_STORE: Path = FEATURES_DIR / "features.zarr"
