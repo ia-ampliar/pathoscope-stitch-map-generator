@@ -59,4 +59,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # python -m src.modules.features.detect.benchmark path/to/image
     main()
