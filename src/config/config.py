@@ -20,3 +20,6 @@ class Config:
     # Arquivos
     METADATA_FILE: Path = BASE_DIR / "metadata" / "dataset.json"
     VALID_TILES_FILE: Path = BASE_DIR / "metadata" / "valid_tiles.json"
+
+    # Grafo
+    GRAPH_FILE: Path = BASE_DIR / "result" / "graph.jpg"
