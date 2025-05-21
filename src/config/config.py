@@ -29,3 +29,9 @@ class Config:
     DETECTION_N_JOBS: int = -1
     FEATURES_DIR: Path = BASE_DIR / "features"
     KEYPOINTS_ZARR_STORE: Path = FEATURES_DIR / "features.zarr"
+
+    # Etapa de matching
+    MATCHING_ZARR_PATH: Path = BASE_DIR / "matches"
+    MATCHER: str = "bf"
+    MATCHING_RATIO_THRESH: float = 0.5
+    MATCHING_N_JOBS = -1
