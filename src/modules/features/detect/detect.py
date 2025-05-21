@@ -1,5 +1,6 @@
 import gc
 import json
+import logging
 from pathlib import Path
 from time import perf_counter
 
@@ -11,6 +12,8 @@ from joblib import Parallel, delayed
 from src.config.config import Config
 
 from .registry import get_detector
+
+logger = logging.getLogger(__name__)
 
 
 def process_tile(algorithm, tile, valid_tiles):
@@ -24,7 +27,7 @@ def process_tile(algorithm, tile, valid_tiles):
     img_path = Path(tile["path"]) / tile["name"]  # Corrigido o caminho da imagem
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
     if img is None:
-        print(f"[!] Erro ao abrir imagem: {img_path}")
+        logger.error(f"[!] Erro ao abrir imagem: {img_path}")
         return tile_name, None, None, False, tile["coordinates"]
 
     keypoints, descriptors = detector.detect_and_compute(img)
@@ -63,7 +66,7 @@ def process_tile(algorithm, tile, valid_tiles):
 def save_to_zarr(zarr_store, results):
     for tile_name, kp_array, descriptors, registered, coords in results:
         if kp_array is None or descriptors is None:
-            print(f"[!] Tile '{tile_name}' ignorado (keypoints/descriptors None)")
+            logger.info(f"[!] Tile '{tile_name}' ignorado (keypoints/descriptors None)")
             continue  # Ignora o tile se os keypoints ou descritores estiverem ausentes
 
         group = zarr_store.create_group(tile_name, overwrite=True)
@@ -111,9 +114,10 @@ def detect():
     save_to_zarr(zarr_store, results)
 
     end = perf_counter()
-    print(f"Features extraídas e salvas em {Config.KEYPOINTS_ZARR_STORE}")
-    print(f"Tempo total: {end - start:.2f} segundos")
+    logger.info(f"Features extraídas e salvas em {Config.KEYPOINTS_ZARR_STORE}")
+    logger.info(f"Tempo total: {end - start:.2f} segundos")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.INFO)
     detect()
