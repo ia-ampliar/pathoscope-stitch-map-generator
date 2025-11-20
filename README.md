@@ -24,13 +24,21 @@ python -m venv venv
 python -m pip install --upgrade pip
 ```
 
+### Instala as dependências
+
+```bash
+python -m pip install -r .\requirements\requirements.txt
+```
+
 ## 2. Iniciando o projeto (Cria estrutura de diretórios)
 
 Para criar a estrutura de diretórios necessária para a execução do pipeline execute o módulo initializer
 
 ```bash
-python -m src.modules.initializer.initializer_structure
+python -m src.modules.initializer.initialize_structure
 ```
+
+Após a criação da estrutura de diretórios, insira os tiles em `output/tiles`
 
 ## 3. Extração de metadados dos tiles
 
