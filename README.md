@@ -11,6 +11,11 @@ Após realizar o git clone do repositório, crie uma venv e com a venv atividada
 ```bash
 python -m venv venv
 ```
+crie o ambiente com uma versão do python acima da 3.10. Por exemplo
+
+```bash
+py -3.11 -m venv venv
+```
 
 ### Ativa o ambiente virtual
 

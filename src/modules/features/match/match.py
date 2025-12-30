@@ -57,29 +57,64 @@ def match_pair(tile_a, tile_b) -> int:
         return 0
 
     print(f"[MATCHING] {tile_a} <-> {tile_b}")
+    # Realiza o matching inicial (ex: KNN ou Brute Force)
     raw_matches = matcher.match(kp1, desc1, kp2, desc2)
-    matches = raw_matches[:100]
-
-    if len(matches) == 0:
+    
+    # É necessário um mínimo de 4 pontos para homografia robusta [7, 8]
+    if len(raw_matches) < 4:
+        print(f"Matches insuficientes para RANSAC: {len(raw_matches)}")
         return 0
 
+    # --- INÍCIO DO PROCESSO RANSAC ---
+    # 1. Extrair as coordenadas (x, y) dos pontos correspondentes [4]
+    src_pts = np.float32([kp1[m.queryIdx].pt for m in raw_matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([kp2[m.trainIdx].pt for m in raw_matches]).reshape(-1, 1, 2)
+
+    # 2. Estimar a Transformação Afim com RANSAC para remover outliers [2, 3]
+    # O threshold de 5.0 define a tolerância de erro de reprojeção em pixels
+    matrix, mask = cv2.findHomography(
+        src_pts, 
+        dst_pts, 
+        method=cv2.RANSAC, 
+        ransacReprojThreshold=5.0
+    )
+
+    if matrix is None:
+        print(f"Falha ao estimar geometria robusta para {tile_a} e {tile_b}")
+        return 0
+
+    # 3. Filtrar apenas os "inliers" (pontos que seguem o modelo geométrico) [9]
+    # mask.ravel() transforma a máscara em uma lista simples de 0s e 1s
+    matches_mask = mask.ravel().tolist()
+    good_matches = [raw_matches[i] for i in range(len(raw_matches)) if matches_mask[i] == 1]
+    
+    print(f"[RANSAC] Filtrados {len(good_matches)} inliers de {len(raw_matches)} matches totais.")
+
+    if len(good_matches) == 0:
+        return 0
+
+    # --- SALVAMENTO NO ZARR ---
     match_filename = f"{tile_a}__{tile_b}.zarr"
     output_path = Config.MATCHING_ZARR_PATH / match_filename
     match_zarr_store = zarr.open(output_path, mode="w")
     group = match_zarr_store.create_group("matches", overwrite=True)
 
+    # Salva apenas os índices dos matches validados pelo RANSAC 
     zarr.array(
-        np.array([(m.queryIdx, m.trainIdx) for m in matches]),
+        np.array([(m.queryIdx, m.trainIdx) for m in good_matches]),
         store=group.store,
         path=f"{group.path}/matches",
         chunks=(100, 2),
         dtype=int,
     )
 
+    # Armazena a matriz resultante como metadado para uso na costura (canvas.populate) 
     group.attrs["tile_a"] = tile_a
     group.attrs["tile_b"] = tile_b
+    group.attrs["homography_matrix"] = matrix.tolist() # Converter para lista para JSON
+    group.attrs["inlier_count"] = len(good_matches)
 
-    print(f"[SALVO] {output_path}")
+    print(f"[SALVO] {output_path} com matriz de transformação.")
     return 1
 
 
