@@ -20,7 +20,7 @@ def load_mosaic_data():
         group = store['matches']
         
         # Prioriza a matriz afim conforme discutido na conversa history
-        matrix = group.attrs.get("affine_matrix") or group.attrs.get("homography_matrix")
+        matrix = group.attrs.get("affine_matrix") or group.attrs.get("translation_matrix")
         
         if matrix:
             transformations.append({

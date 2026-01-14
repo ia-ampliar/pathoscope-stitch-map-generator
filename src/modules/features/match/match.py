@@ -72,21 +72,49 @@ def match_pair(tile_a, tile_b) -> int:
 
     # 2. Estimar a Transformação Afim com RANSAC para remover outliers [2, 3]
     # O threshold de 5.0 define a tolerância de erro de reprojeção em pixels
-    matrix, mask = cv2.findHomography(
-        src_pts, 
-        dst_pts, 
-        method=cv2.RANSAC, 
-        ransacReprojThreshold=5.0
+
+    # --- HOMOGRAFIA ---
+    # matrix, mask = cv2.findHomography(
+    #     src_pts, 
+    #     dst_pts, 
+    #     method=cv2.RANSAC, 
+    #     ransacReprojThreshold=5.0
+    # )
+
+    # --- TRANSLAÇÃO FORÇADA ---
+    src_xy = src_pts.reshape(-1, 2).astype(np.float32)
+    dst_xy = dst_pts.reshape(-1, 2).astype(np.float32)
+
+    M, mask = cv2.estimateAffinePartial2D(
+        src_xy,
+        dst_xy,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=5.0,
+        maxIters=2000,
+        confidence=0.99,
+        refineIters=10,
     )
 
-    if matrix is None:
-        print(f"Falha ao estimar geometria robusta para {tile_a} e {tile_b}")
+    if M is None or mask is None:
+        print(f"Falha ao estimar translação robusta para {tile_a} e {tile_b}")
         return 0
 
-    # 3. Filtrar apenas os "inliers" (pontos que seguem o modelo geométrico) [9]
-    # mask.ravel() transforma a máscara em uma lista simples de 0s e 1s
+    dx = float(M[0, 2])
+    dy = float(M[1, 2])
+
+    # 3) Construir matriz homogênea 3x3 APENAS de translação
+    matrix = np.array(
+        [
+            [1.0, 0.0, dx],
+            [0.0, 1.0, dy],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+
+    # 4) Filtrar apenas os "inliers"
     matches_mask = mask.ravel().tolist()
-    good_matches = [raw_matches[i] for i in range(len(raw_matches)) if matches_mask[i] == 1]
+    good_matches = [raw_matches[i] for i in range(len(raw_matches)) if matches_mask[i]]
     
     print(f"[RANSAC] Filtrados {len(good_matches)} inliers de {len(raw_matches)} matches totais.")
 
@@ -111,7 +139,7 @@ def match_pair(tile_a, tile_b) -> int:
     # Armazena a matriz resultante como metadado para uso na costura (canvas.populate) 
     group.attrs["tile_a"] = tile_a
     group.attrs["tile_b"] = tile_b
-    group.attrs["homography_matrix"] = matrix.tolist() # Converter para lista para JSON
+    group.attrs["translation_matrix"] = matrix.tolist() # Converter para lista para JSON
     group.attrs["inlier_count"] = len(good_matches)
 
     print(f"[SALVO] {output_path} com matriz de transformação.")
