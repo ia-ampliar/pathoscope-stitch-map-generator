@@ -23,6 +23,7 @@ class Config:
 
     # Grafo
     GRAPH_FILE: Path = BASE_DIR / "result" / "graph.jpg"
+    TOPOLOGY_GRAPH_FILE: Path = BASE_DIR / "result" / "graph_topology.gpickle"
 
     # Etapa de detecção de keypoints
     DETECTION_ALGORITHM: str = "orb"
@@ -45,3 +46,4 @@ class Config:
     CANVAS_WITH_DRAW_MATCHES_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_with_matches.tif"
     CANVAS_GAP: int = 100
     CANVAS_MAX_MATCHES_TO_DRAW = 20
+
