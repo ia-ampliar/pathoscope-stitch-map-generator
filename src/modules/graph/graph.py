@@ -6,12 +6,63 @@ from typing import Dict
 
 import matplotlib.pyplot as plt
 import networkx as nx
+import pickle
 from matplotlib.patches import Patch
 
 from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
 
 logger = logging.getLogger(__name__)
+
+def save_graph(G: nx.Graph, path: Path) -> None:
+    """
+    Persiste um grafo do NetworkX em disco usando o formato 'gpickle'.
+
+    Por que gpickle?
+    - Salva o grafo completo (nós, arestas e atributos) sem precisar conversões.
+    - Ideal para pipeline interno (rápido e simples).
+    - Mantém tipos Python (ex.: nós como tuplas (x, y)).
+
+    Parâmetros:
+        G (nx.Graph): Grafo a ser salvo.
+        path (Path): Caminho do arquivo de saída (ex.: Config.TOPOLOGY_GRAPH_FILE).
+
+    Efeito:
+        - Cria o diretório pai se não existir.
+        - Salva o grafo no caminho informado.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Usando pickle diretamente para maior controle
+    with open(path, "wb") as f:
+        pickle.dump(G, f)
+
+    logger.info(f"Grafo salvo em: {path}")
+
+
+def load_graph(path: Path) -> nx.Graph:
+    """
+    Carrega um grafo do NetworkX a partir de um arquivo 'gpickle'.
+
+    Parâmetros:
+        path (Path): Caminho do arquivo (.gpickle).
+
+    Retorna:
+        nx.Graph: O grafo carregado do disco.
+
+    Observações:
+        - Se o arquivo não existir, essa função levanta FileNotFoundError.
+          (Isso é bom para falhar cedo e você decidir como tratar no fluxo principal.)
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"Arquivo de grafo não encontrado: {path}")
+
+    # Usando pickle diretamente para maior controle
+    with open(path, "rb") as f:
+        G = pickle.load(f)
+    
+    logger.info(f"Grafo carregado de: {path}")
+    return G
 
 
 def load_valid_tiles(path: Path) -> Dict[str, bool]:
@@ -96,11 +147,29 @@ def plot_graph(G: nx.Graph, output_path: Path, spacing: int = 100):
 
 
 def generate_graph():
+    # Gera o grafo de tiles e salva a imagem
     pattern = re.compile(Config.COORDINATES_PATTERN)
+
+    # Carrega os tiles válidos
     valid_tiles = load_valid_tiles(Config.VALID_TILES_FILE)
+
+    # Constrói o grafo
     graph = build_graph(valid_tiles, pattern)
+
+    # Salva o grafo em disco
+    save_graph(graph, Config.TOPOLOGY_GRAPH_FILE)
+
+    # Gera a imagem do grafo
     plot_graph(graph, Config.GRAPH_FILE)
+
     logger.info(f"Grafo criado em: {Config.GRAPH_FILE}")
+
+    # Exemplo de carregamento do grafo salvo
+    graph_ = load_graph(Config.TOPOLOGY_GRAPH_FILE)
+
+    # Verifica grafo carregado
+    print(f"Grafos iguais? {graph_.number_of_nodes() == graph.number_of_nodes()}")  # Deve ser True
+
 
 
 if __name__ == "__main__":
