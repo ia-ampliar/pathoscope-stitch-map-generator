@@ -146,6 +146,41 @@ def plot_graph(G: nx.Graph, output_path: Path, spacing: int = 100):
     plt.close()
 
 
+def get_or_build_topological_graph(
+    valid_tiles: Dict[str, bool],
+    pattern: re.Pattern,
+    force_rebuild: bool = False,
+) -> nx.Graph:
+    """
+    Retorna o grafo topológico persistido em disco, se existir.
+    Caso contrário (ou se force_rebuild=True), constrói um novo,
+    salva em disco e retorna.
+
+    Parâmetros:
+        valid_tiles (Dict[str, bool]): Dicionário de tiles válidos.
+        pattern (re.Pattern): Regex para extração das coordenadas.
+        force_rebuild (bool): Se True, ignora o grafo salvo e recria.
+
+    Retorna:
+        nx.Graph: Grafo topológico pronto para uso.
+    """
+    graph_path = Config.TOPOLOGY_GRAPH_FILE
+
+    # Caso 1: usar grafo salvo em disco
+    if graph_path.exists() and not force_rebuild:
+        logger.info("Grafo topológico encontrado em disco. Carregando...")
+        return load_graph(graph_path)
+
+    # Caso 2: construir novo grafo
+    logger.info("Construindo novo grafo topológico...")
+    G = build_graph(valid_tiles, pattern)
+
+    # Persistir em disco
+    save_graph(G, graph_path)
+
+    return G
+
+
 def generate_graph():
     # Gera o grafo de tiles e salva a imagem
     pattern = re.compile(Config.COORDINATES_PATTERN)
@@ -153,25 +188,16 @@ def generate_graph():
     # Carrega os tiles válidos
     valid_tiles = load_valid_tiles(Config.VALID_TILES_FILE)
 
-    # Constrói o grafo
-    graph = build_graph(valid_tiles, pattern)
-
-    # Salva o grafo em disco
-    save_graph(graph, Config.TOPOLOGY_GRAPH_FILE)
+    # Obtém ou constrói o grafo topológico
+    graph = get_or_build_topological_graph(valid_tiles, pattern)
 
     # Gera a imagem do grafo
     plot_graph(graph, Config.GRAPH_FILE)
 
-    logger.info(f"Grafo criado em: {Config.GRAPH_FILE}")
-
-    # Exemplo de carregamento do grafo salvo
-    graph_ = load_graph(Config.TOPOLOGY_GRAPH_FILE)
-
-    # Verifica grafo carregado
-    print(f"Grafos iguais? {graph_.number_of_nodes() == graph.number_of_nodes()}")  # Deve ser True
-
+    # logger.info(f"Grafo criado em: {Config.GRAPH_FILE}")
 
 
 if __name__ == "__main__":
     logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.DEBUG)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
     generate_graph()
