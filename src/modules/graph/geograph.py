@@ -6,6 +6,7 @@ import networkx as nx
 from pathlib import Path
 import re
 import logging
+import matplotlib.pyplot as plt
 
 from src.modules.graph.graph import load_valid_tiles, load_graph, save_graph
 
@@ -150,6 +151,98 @@ def build_geometric_graph_translation(
     )
     return G_geo
 
+
+def plot_geometric_graph_with_weights(
+    G_geo: nx.DiGraph,
+    output_path: Path,
+    show_arrows: bool = False,
+    decimals: int = 1,
+) -> None:
+    """
+    Plota o grafo geométrico com os pesos (dx, dy) nas arestas.
+
+    Estratégia padrão (show_arrows=False):
+      - Converte para grafo não-dirigido para evitar duplicar (u->v e v->u).
+      - Mostra apenas 1 label por par.
+
+    Se show_arrows=True:
+      - Desenha o DiGraph com setas.
+      - Ainda assim aplica um filtro simples de labels para não duplicar tudo.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Posição dos nós: baseada nas coordenadas do próprio nó (x, y)
+    # Inverte Y para ficar “de cima pra baixo” como no seu plot topológico.
+    pos = {node: (node[0], -node[1]) for node in G_geo.nodes()}
+
+    plt.figure(figsize=(10, 8))
+
+    if not show_arrows:
+        # Visualização sem duplicar direções
+        G_und = G_geo.to_undirected()
+
+        # Cria labels de aresta pegando um sentido “canônico” (u->v se existir)
+        edge_labels = {}
+        for u, v in G_und.edges():
+            # escolhe um sentido consistente para pegar (dx, dy)
+            if G_geo.has_edge(u, v):
+                dx = G_geo.edges[u, v]["dx"]
+                dy = G_geo.edges[u, v]["dy"]
+            else:
+                # se por algum motivo só existir v->u, invertimos
+                dx = -G_geo.edges[v, u]["dx"]
+                dy = -G_geo.edges[v, u]["dy"]
+
+            edge_labels[(u, v)] = f"({dx:.{decimals}f},{dy:.{decimals}f})"
+
+        nx.draw(
+            G_und,
+            pos,
+            with_labels=True,
+            node_size=900,
+            font_size=8,
+        )
+        nx.draw_networkx_edge_labels(
+            G_und,
+            pos,
+            edge_labels=edge_labels,
+            font_size=7,
+        )
+
+    else:
+        # Visualização com setas (pode ficar mais carregado)
+        # Para reduzir duplicação visual, só rotula arestas num critério simples.
+        edge_labels = {}
+        for u, v in G_geo.edges():
+            dx = G_geo.edges[u, v]["dx"]
+            dy = G_geo.edges[u, v]["dy"]
+
+            # filtro anti-duplicação simples: só rotula se (dx > 0) ou (dx==0 e dy > 0)
+            if (dx > 0) or (dx == 0 and dy > 0):
+                edge_labels[(u, v)] = f"({dx:.{decimals}f},{dy:.{decimals}f})"
+
+        nx.draw(
+            G_geo,
+            pos,
+            with_labels=True,
+            node_size=900,
+            font_size=8,
+            arrows=True,
+            arrowsize=15,
+        )
+        nx.draw_networkx_edge_labels(
+            G_geo,
+            pos,
+            edge_labels=edge_labels,
+            font_size=7,
+        )
+
+    plt.title("Geometric graph (translation dx, dy)")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=200)
+    plt.close()
+
+
 def generate_geometric_graph():
 
     # Obtém ou constrói o grafo topológico
@@ -164,12 +257,21 @@ def generate_geometric_graph():
     geo_graph_path = Config.GEOMETRIC_GRAPH_FILE
     save_graph(G_geo, geo_graph_path)
 
+    plot_geometric_graph_with_weights(
+        G_geo,
+        output_path=Config.GEOMETRIC_GRAPH_WEIGHTS_FILE,
+        show_arrows=False, 
+    )
+
 
 if __name__ == "__main__":
 
     # Configura o logging básico
     logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.DEBUG)
 
+    # Suprime avisos do matplotlib
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    
     generate_geometric_graph()
 
 
