@@ -61,7 +61,7 @@ Para realizar a classificação dos tiles candidatos, execute o módulo tile_cla
 python -m src.modules.tile.classify.classifier
 ```
 
-## 4. Geração do Grafo
+## 4. Geração do Grafo Topológico
 
 Para criar a imagem do grafo com nós e arestas indicando o posicionamento dos tiles assim como candidatos ou não, execute o módulo
 
@@ -85,7 +85,15 @@ Para realizar o match entre os tiles execute o módulo
 python -m src.modules.features.match.match
 ```
 
-## 7. Criação do Canvas
+## 7. Geração do Grafo Geométrico
+
+Para gerar o grafo geométrico bidericional execute o módulo
+
+```bash
+python -m src.modules.graph.geograph
+```
+
+## 8. Criação do Canvas
 
 Para realizar a criação do canvas em branco (para ser preenchido posteriormente) execute o módulo
 
@@ -93,7 +101,7 @@ Para realizar a criação do canvas em branco (para ser preenchido posteriorment
 python -m src.modules.canvas.create
 ```
 
-## 8. Preenchimento do Canvas
+## 9. Preenchimento do Canvas
 
 Para inserir os tiles no canvas execute o módulo
 
@@ -101,7 +109,7 @@ Para inserir os tiles no canvas execute o módulo
 python -m src.modules.canvas.populate
 ```
 
-## 9. Desenho dos Matches
+## 10. Desenho dos Matches
 
 Para desenhar os matches no canvas execute o módulo
 
