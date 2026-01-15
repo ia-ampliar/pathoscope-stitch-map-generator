@@ -12,6 +12,7 @@ from matplotlib.patches import Patch
 from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
 
+
 logger = logging.getLogger(__name__)
 
 def save_graph(G: nx.Graph, path: Path) -> None:
@@ -198,6 +199,10 @@ def generate_graph():
 
 
 if __name__ == "__main__":
+    # Configura o logging básico
     logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.DEBUG)
+
+    # Suprime avisos do matplotlib
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
+
     generate_graph()

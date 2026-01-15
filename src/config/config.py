@@ -24,6 +24,7 @@ class Config:
     # Grafo
     GRAPH_FILE: Path = BASE_DIR / "result" / "graph.jpg"
     TOPOLOGY_GRAPH_FILE: Path = BASE_DIR / "result" / "graph_topology.gpickle"
+    GEOMETRIC_GRAPH_FILE: Path = BASE_DIR / "result" / "graph_geometric.gpickle"
 
     # Etapa de detecção de keypoints
     DETECTION_ALGORITHM: str = "orb"
