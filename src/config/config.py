@@ -45,7 +45,7 @@ class Config:
     BLANK_CANVAS_PATH: Path = CANVAS_OUTPUT_PATH / "canvas.dat"
     BLANK_CANVAS_GEOM_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_geom.dat"
     CANVAS_CHUNK_SIZE: tuple = (1024, 1024, 3)  # Ajuste conforme seu hardware
-    CANVAS_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_geom_shape.npy"
+    CANVAS_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_shape.npy"
     CANVAS_GEOM_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_geom_shape.npy"
     CANVAS_POPULATED_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_populated.tif"
     CANVAS_WITH_DRAW_MATCHES_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_with_matches.tif"
