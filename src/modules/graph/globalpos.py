@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import logging
 import pickle
 from pathlib import Path
@@ -318,9 +319,17 @@ def generate_global_positions(
 
 
 if __name__ == "__main__":
+    
+
+    start_time = time.perf_counter()
+    
     logging.basicConfig(
         level=logging.INFO,
         format="[%(levelname)s] - %(message)s"
     )
     generate_global_positions(force_recompute=True)
     logger.info("Posições globais geradas com sucesso.")
+
+    end_time = time.perf_counter()
+    elapsed = end_time - start_time
+    print(f"Tempo total de execução: {elapsed:.2f} segundos")

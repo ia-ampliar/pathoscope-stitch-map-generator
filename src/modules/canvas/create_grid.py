@@ -12,7 +12,9 @@ from src.utils.coordinates import extract_coordinates
 
 
 def calculate_canvas_size(
-    tile_size: Tuple[int, int], grid_size: Tuple[int, int], gap: int
+    tile_size: Tuple[int, int], 
+    grid_size: Tuple[int, int], 
+    gap: int
 ) -> Tuple[int, int]:
     tile_width, tile_height = tile_size
     n_cols, n_rows = grid_size

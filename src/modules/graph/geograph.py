@@ -1,10 +1,11 @@
 from typing import Optional, Tuple
 
+import time
 import numpy as np
 import zarr
 import networkx as nx
 from pathlib import Path
-import re
+
 import logging
 import matplotlib.pyplot as plt
 
@@ -16,7 +17,9 @@ from src.config.config import Config
 logger = logging.getLogger(__name__)
 
 def _find_match_zarr_path(
-    matches_dir: Path, tile_a: str, tile_b: str
+    matches_dir: Path, 
+    tile_a: str, 
+    tile_b: str
 ) -> Tuple[Optional[Path], Optional[str]]:
     """
     Procura o arquivo .zarr do match entre dois tiles.
@@ -120,9 +123,9 @@ def build_geometric_graph_translation(
         dx = float(M[0, 2])
         dy = float(M[1, 2])
 
-        # Se o arquivo era tile_v__tile_u (B__A), então a translação lida é v -> u.
+        # Se o arquivo era tile_u__tile_v (A__B), então a translação lida é u -> v.
         # Para obter u -> v, invertemos o sinal.
-        if direction == "B__A":
+        if direction == "A__B":
             dx, dy = -dx, -dy
 
         # Criar as duas direções no grafo geométrico
@@ -251,6 +254,7 @@ def generate_geometric_graph():
     # Constrói o grafo geométrico a partir do topológico
     G_geo = build_geometric_graph_translation(G_topo, matches_dir=Config.MATCHING_ZARR_PATH)
 
+    # Loga informações sobre o grafo geométrico criado
     logger.info(f"Grafo geométrico criado com {G_geo.number_of_nodes()} nós e {G_geo.number_of_edges()} arestas.")
 
     # Salva o grafo geométrico em disco
@@ -266,13 +270,17 @@ def generate_geometric_graph():
 
 if __name__ == "__main__":
 
+    generate_geometric_graph()
+    start_time = time.perf_counter()
+    
     # Configura o logging básico
     logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.DEBUG)
 
     # Suprime avisos do matplotlib
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     
-    generate_geometric_graph()
-
+    end_time = time.perf_counter()
+    elapsed = end_time - start_time
+    print(f"Tempo total de execução: {elapsed:.2f} segundos")
 
     

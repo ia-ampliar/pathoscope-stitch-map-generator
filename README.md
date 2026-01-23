@@ -93,12 +93,20 @@ Para gerar o grafo geométrico bidericional execute o módulo
 python -m src.modules.graph.geograph
 ```
 
-## 8. Criação do Canvas
+## 8. Calcula as posições globais
+
+Para calcular as posições globais a partir do grafo geométrico bidericional execute o módulo
+
+```bash
+python -m src.modules.graph.globalpos
+```
+
+## 9. Criação do Canvas
 
 Para realizar a criação do canvas em branco (para ser preenchido posteriormente) execute o módulo
 
 ```bash
-python -m src.modules.canvas.create
+python -m src.modules.canvas.create_geom
 ```
 
 ## 9. Preenchimento do Canvas
@@ -106,13 +114,6 @@ python -m src.modules.canvas.create
 Para inserir os tiles no canvas execute o módulo
 
 ```bash
-python -m src.modules.canvas.populate
+python -m src.modules.canvas.populate_geom
 ```
 
-## 10. Desenho dos Matches
-
-Para desenhar os matches no canvas execute o módulo
-
-```bash
-python -m src.modules.canvas.draw_matches
-```

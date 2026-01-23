@@ -43,10 +43,15 @@ class Config:
     # Etapa de criação do canvas
     CANVAS_OUTPUT_PATH: Path = BASE_DIR / "tmp" / "canvas"
     BLANK_CANVAS_PATH: Path = CANVAS_OUTPUT_PATH / "canvas.dat"
-    CANVAS_CHUNK_SIZE: tuple = (1000, 1000, 3)  # Ajuste conforme seu hardware
-    CANVAS_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_shape.npy"
+    BLANK_CANVAS_GEOM_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_geom.dat"
+    CANVAS_CHUNK_SIZE: tuple = (1024, 1024, 3)  # Ajuste conforme seu hardware
+    CANVAS_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_geom_shape.npy"
+    CANVAS_GEOM_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_geom_shape.npy"
     CANVAS_POPULATED_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_populated.tif"
     CANVAS_WITH_DRAW_MATCHES_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_with_matches.tif"
+    CANVAS_PREVIEW_PATH: Path = CANVAS_OUTPUT_PATH / "mosaic_preview.jpg"
+    CANVAS_GEOM_PATH: Path = CANVAS_OUTPUT_PATH / "mosaic_geom.tif"
     CANVAS_GAP: int = 100
     CANVAS_MAX_MATCHES_TO_DRAW = 20
+    CANVAS_FILL_VALUE: int = 255
 

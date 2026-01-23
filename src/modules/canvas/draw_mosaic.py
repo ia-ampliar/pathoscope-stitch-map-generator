@@ -1,98 +1,143 @@
-import cv2
-import zarr
-import numpy as np
-import pathlib
-from src.config.config import Config
-from datetime import datetime
-import tifffile
+# src/modules/mosaic/draw_mosaic.py
+
+import logging
+import pickle
 from pathlib import Path
+from typing import Dict, Tuple
+import networkx as nx
 
-def load_mosaic_data():
+from src.config.config import Config
+
+from src.modules.graph.graph import load_graph
+
+
+
+logger = logging.getLogger(__name__)
+
+Node = Tuple[int, int]
+PosXY = Tuple[float, float]
+Positions = Dict[Node, PosXY]
+
+
+def load_global_positions(path: Path) -> Positions:
     """
-    Varre os stores Zarr de matches para recuperar as transformações calculadas.
+    Carrega o arquivo global_positions.pkl gerado pelo módulo globalpos.py.
+
+    O conteúdo esperado é:
+      dict { (x, y): (X, Y) }
+    onde:
+      - (x, y) são coordenadas do nó (grid)
+      - (X, Y) são coordenadas globais em pixels (já normalizadas)
     """
-    transformations = []
-    matches_path = Path(Config.MATCHING_ZARR_PATH)
-    
-    for zarr_path in matches_path.glob("*.zarr"):
-        store = zarr.open(str(zarr_path), mode='r')
-        # Acessa o grupo 'matches' e seus atributos salvos no passo de RANSAC
-        group = store['matches']
-        
-        # Prioriza a matriz afim conforme discutido na conversa history
-        matrix = group.attrs.get("affine_matrix") or group.attrs.get("translation_matrix")
-        
-        if matrix:
-            transformations.append({
-                "tile_a": group.attrs["tile_a"],
-                "tile_b": group.attrs["tile_b"],
-                "matrix": np.array(matrix)
-            })
-    return transformations
+    if not path.exists():
+        raise FileNotFoundError(f"Arquivo global_positions.pkl não encontrado em: {path}")
 
-def draw_mosaic():
+    with path.open("rb") as f:
+        positions = pickle.load(f)
+
+    if not isinstance(positions, dict):
+        raise ValueError(f"Conteúdo inválido em {path}: esperado dict, obtido {type(positions)}")
+
+    logger.info(f"Posições globais carregadas de: {path} (total={len(positions)})")
+    return positions
+
+
+def load_geometric_graph(path: Path) -> nx.DiGraph:
     """
-    Aplica as transformações e salva o mosaico final em formato .tif [3, 4].
+    Carrega o grafo geométrico salvo em disco (pickle), usando a função load_graph do graph.py.
+
+    Esperado:
+      - nx.DiGraph
+      - nós com atributo "label" (ex: "00003_x3_y1_zp1")
+      - arestas com dx/dy (não usamos aqui ainda, mas faz parte do grafo)
     """
-    print("[MOSAICO] Iniciando a costura final...")
-    transformations = load_mosaic_data()
-    
-    if not transformations:
-        print("Nenhuma transformação encontrada nos arquivos Zarr.")
-        return
+    G = load_graph(path)
 
-    # 1. Definir o tamanho do Canvas (ajustar conforme os metadados dos tiles [8])
-    # Para mosaicos grandes, o Zarr/Tifffile é superior ao JPG [3, 9]
-    canvas_size = (5000, 5000, 3) 
-    canvas = np.zeros(canvas_size, dtype=np.uint8)
+    if not isinstance(G, nx.DiGraph):
+        raise ValueError(f"Grafo em {path} não é nx.DiGraph. Tipo encontrado: {type(G)}")
 
-    tiles_dir = Path("output/tiles")
-
-    for trans in transformations:
-        # Carregar imagem do tile_a (origem)
-        img_path = tiles_dir / f"{trans['tile_a']}.jpg"
-        img = cv2.imread(str(img_path))
-        
-        if img is None:
-            print(f"Aviso: Não foi possível carregar o tile {trans['tile_a']}")
-            continue
-
-        # 1. Se for uma matriz afim (2x3), transforme em 3x3
-        matrix = trans['matrix']
-        if matrix.shape == (2, 3):
-            h_matrix = np.eye(3)
-            h_matrix[:2, :] = matrix
-            matrix = h_matrix
-
-
-        # 2. Aplicar a transformação de perspectiva/afim [10, 11]
-        # WarpPerspective funciona para ambas se a matriz for 3x3 [12]
-        h, w = canvas_size[:2]
-        warped_tile = cv2.warpPerspective(
-            img, 
-            matrix.astype(np.float32), 
-            (w, h),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_TRANSPARENT
-        )
-
-        # 3. Blending básico: Adiciona ao canvas onde há pixels da nova imagem [13]
-        mask = (warped_tile > 0)
-        canvas[mask] = warped_tile[mask]
-        print(f"Tile {trans['tile_a']} posicionado com sucesso.")
-
-    # 4. Salvar utilizando tifffile para manter compatibilidade e performance [3, 4]
-    agora = datetime.now()
-    output_file = pathlib.Path(f"output/tmp/canvas/mosaic_final_{agora.strftime('%d%m%Y_%H%M%S')}.tif")
-
-    tifffile.imwrite(
-        str(output_file), 
-        canvas, 
-        compression='zstd', # Compressão eficiente suportada pelo ecossistema Zarr [14, 15]
-        photometric='rgb'
+    logger.info(
+        f"Grafo geométrico carregado de: {path} (nós={G.number_of_nodes()}, arestas={G.number_of_edges()})"
     )
-    
-    print(f"[SUCESSO] Mosaico salvo em: {output_file}")
+    return G
+
+
+def resolve_tile_paths_from_labels(
+    G_geo: nx.DiGraph,
+    positions: Positions,
+    tiles_dir: Path,
+) -> Dict[Node, Path]:
+    """
+    Resolve o caminho da imagem de cada nó usando o atributo "label" do nó no grafo geométrico.
+
+    Estratégia:
+      - Para cada nó presente em positions:
+          - pega label = G_geo.nodes[node]["label"]
+          - procura em tiles_dir por arquivos com padrão: f"{label}.*"
+          - exige:
+              - exatamente 1 arquivo encontrado
+              - caso 0: erro (tile faltando)
+              - caso >1: erro (ambiguidade) [você disse que não ocorre]
+
+    Retorna:
+      dict { node: Path(arquivo_da_imagem) }
+    """
+    if not tiles_dir.exists():
+        raise FileNotFoundError(f"TILES_DIR não encontrado: {tiles_dir}")
+
+    node_to_path: Dict[Node, Path] = {}
+
+    for node in positions.keys():
+        if node not in G_geo.nodes:
+            raise KeyError(
+                f"Nó {node} existe em positions mas não existe no grafo geométrico."
+            )
+
+        label = G_geo.nodes[node].get("label")
+        if not label:
+            raise KeyError(f"Nó {node} não possui atributo 'label' no grafo geométrico.")
+
+        matches = list(tiles_dir.glob(f"{label}.*"))
+
+        if len(matches) == 0:
+            raise FileNotFoundError(
+                f"Nenhuma imagem encontrada para label='{label}' em {tiles_dir} (padrão '{label}.*')."
+            )
+
+        if len(matches) > 1:
+            raise ValueError(
+                f"Ambiguidade: {len(matches)} arquivos encontrados para label='{label}' em {tiles_dir}: {matches}"
+            )
+
+        node_to_path[node] = matches[0]
+
+    logger.info(f"Mapeamento node -> imagem concluído (total={len(node_to_path)}).")
+    return node_to_path
+
+
+def main() -> None:
+    """
+    draw_mosaic - passo 2:
+      - carrega positions globais
+      - carrega grafo geométrico (para obter label por nó)
+      - resolve caminho das imagens em TILES_DIR via label.*
+    """
+    positions = load_global_positions(Config.GLOBAL_POS_FILE)
+
+    G_geo = load_geometric_graph(Config.GEOMETRIC_GRAPH_FILE)
+
+    node_to_path = resolve_tile_paths_from_labels(
+        G_geo=G_geo,
+        positions=positions,
+        tiles_dir=Config.TILES_DIR,
+    )
+
+    # Debug: mostrar 3 exemplos
+    sample = list(node_to_path.items())[:3]
+    logger.info(f"Amostra node->path: {sample}")
+
+
 
 if __name__ == "__main__":
-    draw_mosaic()
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] - %(message)s")
+    main()
