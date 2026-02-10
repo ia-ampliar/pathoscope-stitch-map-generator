@@ -1,168 +1,192 @@
 # PROJECT_CONTEXT.md
 
-# 📌 CONTEXTO DO PROJETO — PIPELINE DE STITCHING GEOMÉTRICO
+## Visão Geral
 
-## Visão geral
+Este projeto implementa um pipeline robusto para **reconstrução geométrica (stitching)** de mosaicos de imagens histopatológicas a partir de tiles sobrepostos, utilizando:
 
-Projeto de **stitching de tiles histopatológicos** usando **grafo geométrico** e **translações estimadas por keypoints**, com foco em modularidade, robustez e escalabilidade para mosaicos grandes.
+- correspondência visual entre tiles adjacentes,
+- modelagem do problema como um **grafo geométrico de restrições relativas**,
+- resolução global por **mínimos quadrados robustos (IRLS + Huber)**,
+- e colagem final em um **canvas global memmap**, exportável em BigTIFF.
 
-O pipeline **já está funcional**, incluindo cálculo correto de posições globais e colagem dos tiles no canvas.
-
----
-
-## Estrutura atual do pipeline
-
-### 1️⃣ `match.py`
-
-- Extrai keypoints e descritores dos tiles (armazenados em `.zarr`).
-- Calcula correspondências entre tiles vizinhos.
-- Usa `cv2.estimateAffinePartial2D` / RANSAC.
-- Salva em cada `.zarr`:
-    - `translation_matrix` (3×3 homogênea, apenas translação relevante).
-- **Observação importante**:
-    - O `dx, dy` salvo representa **mapeamento de pixels entre tiles**, **não** deslocamento físico no canvas.
+O pipeline foi projetado para ser **determinístico, auditável e extensível**, priorizando estabilidade geométrica e qualidade visual do mosaico final.
 
 ---
 
-### 2️⃣ `geograph.py`
+## Estado Atual do Pipeline (Resumo)
 
-- Constrói o **grafo geométrico dirigido** a partir do grafo topológico.
-- Cada aresta armazena `(dx, dy)` como deslocamento entre tiles.
+✅ **Costura geométrica correta**
 
-### 🔑 Correção crítica aplicada
+✅ **Sem artefatos visíveis entre tiles**
 
-Foi necessário **inverter o sinal da translação** para alinhar com o canvas:
+✅ **Sem deslocamentos espúrios em cantos ou bordas**
 
-```python
-if direction =="A__B":
-    dx, dy = -dx, -dy
+✅ **Pipeline estável para grids completos (ex.: 13×13 = 169 tiles)**
+
+O problema residual observado anteriormente em tiles de borda foi **eliminado** após a introdução de **normalização fotométrica prévia das imagens**, evidenciando que a falha não era geométrica, mas **de qualidade de matching visual**.
+
+---
+
+## Arquitetura do Pipeline
+
+### 1. Pré-processamento de Imagens (`preprocesser.py`)
+
+Antes de qualquer matching, os tiles passam por um estágio de **normalização fotométrica**, cujo objetivo é:
+
+- reduzir variações de iluminação,
+- equalizar contraste local,
+- facilitar detecção de keypoints consistentes,
+- aumentar a confiabilidade dos deslocamentos estimados (`dx`, `dy`).
+
+> 🔑 **Decisão chave do projeto**
+> 
+> 
+> A normalização ocorre **antes** da geração do grafo geométrico.
+> 
+> Todo o pipeline subsequente assume que as imagens já estão normalizadas.
+> 
+
+Esse estágio foi decisivo para:
+
+- eliminar mismatches em áreas de fundo,
+- reduzir outliers extremos,
+- estabilizar a solução global sem necessidade de heurísticas adicionais agressivas.
+
+---
+
+### 2. Geração do Grafo Geométrico (`geograph.py` / `create_geom.py`)
+
+Cada tile é representado como um **nó** identificado por `(row, col)`.
+
+As arestas representam **restrições geométricas relativas** entre tiles vizinhos:
 
 ```
-
-Motivo:
-
-- `match.py` estima transformação de coordenadas (pixel → pixel).
-- O canvas precisa de deslocamento físico global.
-- Sem essa inversão, o mosaico ficava desalinhado.
-
-Após essa correção, o grafo geométrico passou a representar corretamente:
-
-pos(v)=pos(u)+Δuv\text{pos}(v) = \text{pos}(u) + \Delta_{uv}
-
-pos(v)=pos(u)+Δuv
-
----
-
-### 3️⃣ `globalpos.py`
-
-- Calcula **posições globais (X, Y)** dos tiles.
-- Usa BFS (com `collections.deque`) a partir de um root escolhido.
-- Propaga posições usando o grafo geométrico.
-- Normaliza para coordenadas positivas.
-- Salva resultado em:
-
-```
-output/result/global_positions.pkl
-
+x_v - x_u ≈ dx
+y_v - y_u ≈ dy
 ```
 
-Formato:
+Cada aresta carrega:
 
-```python
-{ node: (X, Y) }
+- `dx`, `dy` — deslocamento estimado entre tiles,
+- `weight` — confiança do match (derivada da qualidade dos keypoints),
+- metadados (arquivo `.zarr`, ids, etc.).
 
-```
+### Filtros aplicados na criação do grafo
 
----
+Durante a leitura dos matches:
 
-### 4️⃣ `create_geom.py`
+- ❌ deslocamentos fisicamente impossíveis são descartados (`|shift| > MAX_SHIFT`),
+- ❌ deslocamentos nulos (`dx ≈ 0 && dy ≈ 0`) são descartados,
+- ✔ apenas vizinhança válida é considerada.
 
-- Cria um **canvas geométrico global** via `numpy.memmap`.
-- Calcula bounding box global a partir das posições.
-- Usa:
-    - `CANVAS_CHUNK_SIZE`
-    - `CANVAS_FILL_VALUE`
-- Salva:
-    - `canvas_geom.dat`
-    - `canvas_geom_shape.npy`
+Esses filtros são **hard gates geométricos** e não são revertidos posteriormente.
 
 ---
 
-### 5️⃣ `populate_geom.py`
+### 3. Resolução Global das Posições (`globalpos.py`)
 
-- Abre o canvas geométrico.
-- Carrega:
-    - `global_positions.pkl`
-    - `graph_geometric.gpickle`
-- Resolve mapeamento:
+O grafo geométrico é resolvido por um solver global robusto:
 
-```
-node ->label -> arquivo de imagem (label.*)
+- **IRLS (Iteratively Reweighted Least Squares)**,
+- **loss de Huber** para atenuar outliers,
+- âncora fixa (`root`) para eliminar grau de liberdade global.
 
-```
+### Características do solver
 
-- Cola tiles no canvas via **overwrite direto**.
-- Exporta:
-    - preview JPG
-    - BigTIFF final
+- resolve simultaneamente **todos os ciclos do grafo**,
+- reduz drift acumulado típico de BFS,
+- usa pesos base + pesos robustos (Huber),
+- permite *gating* por resíduo após iterações iniciais.
 
-✅ Após a correção em `geograph.py`, o mosaico passou a ser colado **corretamente alinhado**.
+### Diagnóstico
 
----
+O solver produz logs detalhados contendo:
 
-## Problema atual identificado
+- estatísticas de resíduos (mean, median, p90, p95, max),
+- número de arestas atenuadas,
+- nós inalcançáveis (se existirem),
+- verificação da posição do root,
+- offset global aplicado para normalização positiva.
 
-Quando há tiles com **muito branco / pouca textura**:
-
-- O matching gera poucos inliers.
-- Algumas translações ficam ruins (ou próximas de zero).
-- Essas arestas “podres” causam erro na propagação das posições globais.
-
-Atualmente:
-
-- Todas as arestas são usadas igualmente no BFS.
-- Não há filtragem ou agregação de múltiplas estimativas.
+Esses logs são parte fundamental do processo de validação.
 
 ---
 
-## Próximo passo planejado
+### 4. Gating Pós-Solver (Controle de Qualidade)
 
-Tornar o cálculo das posições globais **mais robusto**, especialmente para tiles com pouco conteúdo.
+Após a convergência inicial:
 
-Abordagem discutida e considerada ideal:
+- arestas com **resíduo acima de um limiar físico (ex.: 200 px)** podem ser removidas,
+- o solver é reexecutado com o subconjunto consistente.
 
-### ✅ Agregação por vizinhos confiáveis
+> ⚠️ Importante
+> 
+> 
+> Tentativas de impor regras como “grau mínimo por nó” mostraram-se **desnecessárias** após a normalização das imagens e foram **abandonadas** como regra obrigatória.
+> 
 
-Para um tile `v`:
+O pipeline atual confia prioritariamente em:
 
-- Cada vizinho `u` fornece uma estimativa:
-
-p^v(u)=pu+Δuv\hat{p}_v^{(u)} = p_u + \Delta_{uv}
-
-p^v(u)=pu+Δuv
-
-- A posição final de `v` deve ser:
-    - **mediana** das estimativas, ou
-    - **média ponderada** (peso = inliers / inlier_ratio)
-
-Antes disso:
-
-- Filtrar arestas ruins (ex: `inliers < limiar`).
-- Evitar usar arestas com peso zero.
-- Preferir **não criar a aresta** a criar uma aresta inválida.
+- qualidade fotométrica,
+- pesos de match,
+- robustez do solver global.
 
 ---
 
-## Estado atual
+### 5. Colagem no Canvas Global (`populate_geom.py`)
 
-✔️ Pipeline funcional
+As posições globais são usadas para colar os tiles em um **canvas geométrico memmap**, criado previamente:
 
-✔️ Geometria correta
+- escrita direta em `np.memmap` (baixo uso de RAM),
+- estratégia **overwrite** (sem blending),
+- arredondamento de coordenadas globais,
+- recorte automático em bordas.
 
-✔️ Canvas colado corretamente
+O resultado pode ser exportado como:
 
-🔜 Robustez do grafo geométrico e cálculo de posições globais
+- preview JPG,
+- BigTIFF RGB (compatível com visualizadores WSI).
 
 ---
 
-### 👉 Instrução para nova conversa
+## Lições Aprendidas (Decisões Importantes)
+
+### ✔ Normalização > Heurísticas Geométricas
+
+O principal erro de costura **não era geométrico**, mas causado por:
+
+- baixa textura,
+- fundo homogêneo,
+- variações de iluminação.
+
+A normalização:
+
+- aumentou a estabilidade dos keypoints,
+- reduziu outliers extremos,
+- eliminou a necessidade de regras artificiais no grafo.
+
+### ✔ Solver global funciona quando os dados são bons
+
+O IRLS + Huber mostrou-se suficiente quando:
+
+- os matches são razoáveis,
+- os pesos refletem qualidade real,
+- não há viés sistemático nas imagens.
+
+---
+
+## Estado Atual: Conclusão
+
+📌 O pipeline encontra-se em um **estado estável e correto**, com:
+
+- arquitetura clara,
+- responsabilidades bem separadas,
+- comportamento previsível,
+- resultados visuais de alta qualidade.
+
+Próximos passos naturais (opcionais):
+
+- versionar parâmetros de normalização,
+- salvar métricas de matching por tile,
+- adicionar validação automática por densidade de keypoints,
+- integrar com WSI viewers (OME-TIFF / pyramidal).
