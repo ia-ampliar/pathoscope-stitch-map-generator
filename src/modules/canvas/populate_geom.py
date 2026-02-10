@@ -191,7 +191,7 @@ def main() -> None:
     logger.info(f"[GEOM] Grafo geométrico carregado: nós={G_geo.number_of_nodes()}, arestas={G_geo.number_of_edges()}")
 
     # 4) Resolve node -> imagem via label.*
-    node_to_path = resolve_node_to_image_path(G_geo, positions, Config.TILES_DIR)
+    node_to_path = resolve_node_to_image_path(G_geo, positions, Config.NORMALIZED_DIR)
 
     sample = list(node_to_path.items())[:3]
     logger.info(f"[GEOM] Amostra node->path: {sample}")

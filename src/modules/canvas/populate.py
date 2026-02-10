@@ -52,10 +52,6 @@ def populate():
         tile_img = cv2.cvtColor(tile_img, cv2.COLOR_BGR2RGB)
 
         # Insere o tile no canvas
-        print("canvas shape:", canvas_memmap.shape)
-        print("tile_img shape:", tile_img.shape)
-        print("start_x, start_y, tile_w, tile_h:", start_x, start_y, tile_w, tile_h)
-
         canvas_memmap[start_y : start_y + tile_h, start_x : start_x + tile_w] = tile_img
 
     # Garante que tudo foi salvo no disco

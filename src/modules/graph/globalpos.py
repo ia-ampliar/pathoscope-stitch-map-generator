@@ -7,6 +7,10 @@ import logging
 import pickle
 from pathlib import Path
 from typing import Dict, Tuple, Optional, Any
+import numpy as np
+
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import lsqr
 
 import networkx as nx
 from collections import deque
@@ -41,7 +45,6 @@ def save_positions(positions: Positions, path: Path) -> None:
     with path.open("wb") as f:
         pickle.dump(positions, f, protocol=pickle.HIGHEST_PROTOCOL)
     logger.info(f"Posições globais salvas em: {path}")
-
 
 def load_positions(path: Path) -> Positions:
     """
@@ -127,6 +130,432 @@ def choose_root_node(G_geo: nx.DiGraph, strategy: str = "center_valid") -> Node:
         f"Estratégia inválida para root: '{strategy}'. Use: "
         "first, first_valid, center, center_valid."
     )
+
+def log_solver_diagnostics(
+    G_geo: nx.DiGraph,
+    positions: dict,
+    root,
+    unreachable: list,
+    residuals: np.ndarray,
+    weights_base: np.ndarray,
+    weights_final: np.ndarray,
+    logger,
+):
+    """
+    Gera logs diagnósticos do solver global de posições.
+
+    Esta função NÃO altera resultados. Serve apenas para inspeção,
+    validação e debug do comportamento do solver robusto.
+    """
+
+    n_nodes_total = G_geo.number_of_nodes()
+    n_nodes_solved = len(positions)
+    n_nodes_unreachable = len(unreachable)
+
+    n_edges_total = G_geo.number_of_edges()
+    n_edges_used = len(weights_base) - 1
+
+    logger.info("=== Solver Global: Diagnóstico ===")
+    logger.info(f"Nós totais            : {n_nodes_total}")
+    logger.info(f"Nós resolvidos        : {n_nodes_solved}")
+    logger.info(f"Nós inalcançáveis     : {n_nodes_unreachable}")
+    logger.info(f"Arestas totais        : {n_edges_total}")
+    logger.info(f"Arestas usadas        : {n_edges_used}")
+
+    if residuals.size == 0:
+        logger.warning("Nenhum resíduo disponível para análise.")
+        return
+
+    # Estatísticas de resíduos
+    mean_r = float(np.mean(residuals))
+    median_r = float(np.median(residuals))
+    p90_r = float(np.percentile(residuals, 90))
+    p95_r = float(np.percentile(residuals, 95))
+    max_r = float(np.max(residuals))
+
+    logger.info(
+        "Resíduos (pixels) | "
+        f"mean={mean_r:.3f}, "
+        f"median={median_r:.3f}, "
+        f"p90={p90_r:.3f}, "
+        f"p95={p95_r:.3f}, "
+        f"max={max_r:.3f}"
+    )
+
+    # Análise de pesos
+    mean_w_base = float(np.mean(weights_base))
+    mean_w_final = float(np.mean(weights_final))
+
+    attenuated = np.sum(weights_final < 0.5 * weights_base)
+    heavily_attenuated = np.sum(weights_final < 0.1 * weights_base)
+
+    logger.info(
+        "Pesos | "
+        f"mean_base={mean_w_base:.4f}, "
+        f"mean_final={mean_w_final:.4f}"
+    )
+    logger.info(
+        f"Arestas atenuadas (Huber)     : {attenuated}/{n_edges_used}"
+    )
+    logger.info(
+        f"Arestas fortemente atenuadas : {heavily_attenuated}/{n_edges_used}"
+    )
+
+    # Sanity checks
+    rx, ry = positions.get(root, (None, None))
+    if rx is not None:
+        logger.info(f"Root position (esperado ~0,0): x={rx:.6f}, y={ry:.6f}")
+
+    # Checagem numérica
+    all_vals = np.array(list(positions.values()), dtype=np.float64)
+    if not np.all(np.isfinite(all_vals)):
+        logger.warning("Posições globais contêm NaN ou inf.")
+
+
+def _build_system(
+    u_arr: np.ndarray,
+    v_arr: np.ndarray,
+    dx_arr: np.ndarray,
+    dy_arr: np.ndarray,
+    w_arr: np.ndarray,
+    root_i: int,
+    n_nodes: int,
+):
+    n_constraints = int(len(u_arr))               # só arestas
+    m = n_constraints + 1                         # +1 âncora
+    anchor_row = m - 1
+
+    rows = []
+    cols = []
+    vals = []
+    bx = np.zeros(m, dtype=np.float64)
+    by = np.zeros(m, dtype=np.float64)
+
+    # Linhas das restrições (x_v - x_u = dx ; y_v - y_u = dy)
+    for i in range(n_constraints):
+        ui = int(u_arr[i]); vi = int(v_arr[i])
+        rows += [i, i]
+        cols += [vi, ui]
+        vals += [1.0, -1.0]
+        bx[i] = float(dx_arr[i])
+        by[i] = float(dy_arr[i])
+
+    # Âncora: x_root = 0 e y_root = 0
+    rows.append(anchor_row); cols.append(int(root_i)); vals.append(1.0)
+    bx[anchor_row] = 0.0
+    by[anchor_row] = 0.0
+
+    A = coo_matrix((vals, (rows, cols)), shape=(m, n_nodes)).tocsr()
+    w_base = np.concatenate([w_arr.astype(np.float64), np.array([1.0], dtype=np.float64)])
+
+    return A, bx, by, w_base, n_constraints
+
+
+def _build_undirected_constraint_graph(n_nodes: int, u_idx: np.ndarray, v_idx: np.ndarray, keep: np.ndarray) -> nx.Graph:
+    """
+    Grafo não-dirigido de conectividade induzido pelas restrições mantidas (keep=True).
+    Nós são índices [0..n_nodes-1] (índices locais do solver).
+    """
+    H = nx.Graph()
+    H.add_nodes_from(range(n_nodes))
+    kept = np.where(keep)[0]
+    edges = [(int(u_idx[j]), int(v_idx[j])) for j in kept]
+    H.add_edges_from(edges)
+    return H
+
+
+def compute_global_positions_robust_ls(
+    G_geo: nx.DiGraph,
+    root: Optional[Node] = None,  
+    root_strategy: str = "center_valid",
+    max_iters: int = 8,
+    huber_k: float = 2.5,
+    min_weight: float = 1e-6,
+    residual_gate_px: float = 200.0,
+    gate_after_iter: int = 1,
+) -> Tuple[Positions, Node, list]:
+    
+    """
+    Estima as posições globais dos tiles a partir de um grafo geométrico dirigido
+    utilizando um solver de mínimos quadrados robusto (IRLS + loss de Huber).
+
+    Esta função formula o problema como um sistema global de restrições do tipo:
+
+        x_v - x_u ≈ dx
+        y_v - y_u ≈ dy
+
+    para cada aresta geométrica (u -> v) do grafo, resolvendo simultaneamente todas as
+    posições de forma consistente, explorando ciclos do grafo e reduzindo drift.
+
+    A robustez é obtida por:
+    - ponderação das arestas (weight) baseada na qualidade do match
+    - reponderação iterativa (IRLS) com loss de Huber, reduzindo o impacto de outliers
+
+    O sistema é resolvido separadamente para os eixos X e Y, compartilhando a mesma
+    estrutura de pesos.
+
+    Apenas o componente conexo que contém o nó raiz é resolvido. Nós fora desse
+    componente são retornados como inalcançáveis.
+
+    Parâmetros
+    ----------
+    G_geo : nx.DiGraph
+        Grafo geométrico dirigido.
+        Cada aresta deve conter os atributos:
+            - dx (float): deslocamento em X de u para v
+            - dy (float): deslocamento em Y de u para v
+            - weight (float): peso base da restrição (qualidade do match)
+
+    root : Optional[Node], default=None
+        Nó utilizado como âncora do sistema de coordenadas globais.
+        Se None, o nó é escolhido automaticamente conforme root_strategy.
+
+    root_strategy : str, default="center_valid"
+        Estratégia para escolha automática do nó raiz, reutilizando a lógica existente
+        em choose_root_node (ex.: centro do grid, nó válido, etc.).
+
+    max_iters : int, default=8
+        Número máximo de iterações do algoritmo IRLS (Iteratively Reweighted Least Squares).
+        Valores típicos entre 5 e 10 são suficientes na prática.
+
+    huber_k : float, default=2.5
+        Parâmetro da loss de Huber.
+        Define o limiar entre comportamento quadrático (inliers) e linear (outliers).
+        Valores maiores tornam o solver menos agressivo com outliers.
+
+    min_weight : float, default=1e-6
+        Peso mínimo para que uma aresta seja considerada no sistema.
+        Arestas com weight <= min_weight são ignoradas.
+
+    Retorna
+    -------
+    positions : Dict[Node, Tuple[float, float]]
+        Dicionário mapeando cada nó resolvido para sua posição global (x, y).
+
+    used_root : Node
+        Nó efetivamente utilizado como âncora do sistema.
+
+    unreachable : list
+        Lista de nós do grafo geométrico que não pertencem ao componente conexo
+        do nó raiz e, portanto, não tiveram posição global estimada.
+
+    Observações
+    -----------
+    - A posição do nó raiz é fixada em (0, 0) para eliminar a liberdade de translação
+      global do sistema (gauge freedom).
+    - A função não modifica o grafo de entrada.
+    - Este método é significativamente mais robusto que BFS em regiões com:
+        * ciclos
+        * matches ruidosos
+        * tiles com pouco conteúdo visual (ex.: áreas muito brancas)
+    """
+
+    if G_geo.number_of_nodes() == 0:
+        raise ValueError("Grafo geométrico vazio (sem nós).")
+
+    if root is None:
+        root = choose_root_node(G_geo, strategy=root_strategy)
+
+    # Filtrar componente do root
+    G_und = G_geo.to_undirected()
+    component = nx.node_connected_component(G_und, root)
+    nodes = list(component)
+    idx = {n: i for i, n in enumerate(nodes)}
+
+    unreachable = [n for n in G_geo.nodes() if n not in component]
+
+    # Extrair as restrições (uma vez)
+    u_list, v_list, dx_list, dy_list, w_list = [], [], [], [], []
+    meta_list = []  # lista paralela: 1 item por restrição/aresta
+
+    # Preencher listas com arestas válidas
+    for u, v, data in G_geo.edges(data=True):
+        if u not in idx or v not in idx:
+            continue
+        w = float(data.get("weight", 0.0))
+        if w <= min_weight:
+            continue
+        u_list.append(idx[u])
+        v_list.append(idx[v])
+        dx_list.append(float(data.get("dx", 0.0)))
+        dy_list.append(float(data.get("dy", 0.0)))
+        w_list.append(w)
+        meta_list.append((
+            u,  # nó original (ex.: (x,y))
+            v,  # nó original
+            data.get("match_file", ""),  # caminho do .zarr
+        ))
+
+    if len(u_list) == 0:
+        raise ValueError("Nenhuma restrição válida encontrada (arestas com peso > min_weight).")
+    
+
+    u_arr = np.asarray(u_list, dtype=np.int32)
+    v_arr = np.asarray(v_list, dtype=np.int32)
+    dx_arr = np.asarray(dx_list, dtype=np.float64)
+    dy_arr = np.asarray(dy_list, dtype=np.float64)
+    w_arr  = np.asarray(w_list,  dtype=np.float64)
+    meta_arr = np.asarray(meta_list, dtype=object)
+
+    root_i = idx[root]
+
+    # =========================================================
+    # Helper interno: monta A, bx, by, w_base com âncora
+    # =========================================================
+
+    A, bx, by, w_base, n_constraints = _build_system(
+        u_arr, v_arr, dx_arr, dy_arr, w_arr, root_i, len(nodes)
+    )
+
+    # Loop IRLS + Huber + gating
+    w_total = w_base.copy()
+    gated_once = False
+
+    for it in range(max_iters):
+        Wsqrt = np.sqrt(w_total)
+
+        Ax = A.multiply(Wsqrt[:, None])
+        bxw = bx * Wsqrt
+        solx = lsqr(Ax, bxw)[0]
+
+        Ay = A.multiply(Wsqrt[:, None])
+        byw = by * Wsqrt
+        soly = lsqr(Ay, byw)[0]
+
+        rx = (A @ solx) - bx
+        ry = (A @ soly) - by
+        r = np.sqrt(rx * rx + ry * ry) + 1e-12
+
+        # -------------------------
+        # GATING (uma única vez)
+        # -------------------------
+        # Remove restrições com resíduo muito alto (outliers extremos)
+        if (
+            (not gated_once)
+            and (it == gate_after_iter)
+            and (residual_gate_px is not None)
+            and (residual_gate_px > 0)
+        ):
+            r_edges = r[:n_constraints]  # NÃO inclui âncora
+            keep = r_edges <= residual_gate_px
+            num_drop = int((~keep).sum())
+
+            # --- regra: não deixar nó com grau < 2 (no conjunto de restrições) ---
+            min_deg = 2
+
+            # graus considerando apenas arestas mantidas
+            deg = np.zeros(len(nodes), dtype=np.int32)
+            for ui, vi in zip(u_arr[keep], v_arr[keep]):
+                deg[ui] += 1
+                deg[vi] += 1
+
+            # candidatos a restaurar (os que seriam removidos), ordenados por menor resíduo primeiro
+            dropped = np.where(~keep)[0]
+            order = np.argsort(r_edges[dropped])  # menor resíduo = "menos ruim"
+            dropped_sorted = dropped[order]
+
+            changed = True
+            while changed:
+                changed = False
+
+                # nós que estão fracos
+                weak_nodes = np.where(deg < min_deg)[0]
+                if weak_nodes.size == 0:
+                    break
+                weak_set = set(weak_nodes.tolist())
+
+                # tenta restaurar arestas que conectem nós fracos
+                for j in dropped_sorted:
+                    if keep[j]:
+                        continue
+
+                    ui = int(u_arr[j]); vi = int(v_arr[j])
+
+                    # só restaura se ajuda algum nó fraco
+                    if (ui not in weak_set) and (vi not in weak_set):
+                        continue
+
+                    # restaura esta restrição
+                    keep[j] = True
+                    deg[ui] += 1
+                    deg[vi] += 1
+                    changed = True
+
+                    # atualiza weak_set dinamicamente (para cortar cedo)
+                    if deg[ui] >= min_deg and ui in weak_set:
+                        weak_set.remove(ui)
+                    if deg[vi] >= min_deg and vi in weak_set:
+                        weak_set.remove(vi)
+
+                    if not weak_set:
+                        break
+
+            dropped_idx = np.where(~keep)[0]
+
+            # Ordena removidas por resíduo (maior primeiro)
+            order = np.argsort(r_edges[dropped_idx])[::-1]
+            topk = dropped_idx[order[:10]]
+
+            logger.warning("[GATING] top restrições removidas (pior -> melhor):")
+            for j in topk:
+                u_node, v_node, match_file = meta_arr[j]
+                logger.warning(
+                    f"  r={r_edges[j]:8.2f}px | "
+                    f"{u_node} -> {v_node} | "
+                    f"dx={dx_arr[j]:.2f}, dy={dy_arr[j]:.2f} | "
+                    f"w={w_arr[j]:.4f} | "
+                    f"file={match_file}"
+                )
+
+            if num_drop > 0:
+                logger.warning(
+                    f"[GATING] removendo {num_drop}/{n_constraints} restrições com resíduo > {residual_gate_px:.1f}px"
+                )
+
+                # filtra arrays (somente arestas)
+                u_arr = u_arr[keep]
+                v_arr = v_arr[keep]
+                dx_arr = dx_arr[keep]
+                dy_arr = dy_arr[keep]
+                w_arr = w_arr[keep]
+                meta_arr = meta_arr[keep]
+
+                # reconstrói sistema com conjunto filtrado
+                A, bx, by, w_base, n_constraints = _build_system(
+                    u_arr, v_arr, dx_arr, dy_arr, w_arr, root_i, len(nodes)
+                )
+                w_total = w_base.copy()
+                gated_once = True
+
+                # resolve novamente na próxima iteração com sistema limpo
+                continue
+
+            gated_once = True  # não tinha o que cortar, mas não tenta de novo
+
+        # Huber weights
+        hub = np.ones_like(r)
+        mask = r > huber_k
+        hub[mask] = huber_k / r[mask]
+
+        # atualiza pesos (mantendo base * robusto)
+        w_total = w_base * hub
+
+    # Construir positions de saída
+    positions = {node: (float(solx[idx[node]]), float(soly[idx[node]])) for node in nodes}
+
+    log_solver_diagnostics(
+        G_geo=G_geo,
+        positions=positions,
+        root=root,
+        unreachable=unreachable,
+        residuals=r,
+        weights_base=w_base,
+        weights_final=w_total,
+        logger=logger,
+    )
+    
+    return positions, root, unreachable
+
 
 def compute_global_positions(
     G_geo: nx.DiGraph,
@@ -295,7 +724,12 @@ def generate_global_positions(
         raise ValueError(f"Arquivo {geo_path} não contém um nx.DiGraph válido.")
 
     # Computar posições globais por BFS
-    positions, used_root, unreachable = compute_global_positions(
+    # positions, used_root, unreachable = compute_global_positions(
+    #     G_geo, root=root, root_strategy=root_strategy
+    # )
+
+    # Solver least squares robusto (IRLS + Huber)
+    positions, used_root, unreachable = compute_global_positions_robust_ls(
         G_geo, root=root, root_strategy=root_strategy
     )
 

@@ -59,6 +59,9 @@ def match_pair(tile_a, tile_b) -> int:
     print(f"[MATCHING] {tile_a} <-> {tile_b}")
     # Realiza o matching inicial (ex: KNN ou Brute Force)
     raw_matches = matcher.match(kp1, desc1, kp2, desc2)
+
+    # Quantidade total de matches encontrados
+    raw_match_count = len(raw_matches)
     
     # É necessário um mínimo de 4 pontos para homografia robusta [7, 8]
     if len(raw_matches) < 4:
@@ -115,6 +118,16 @@ def match_pair(tile_a, tile_b) -> int:
     # 4) Filtrar apenas os "inliers"
     matches_mask = mask.ravel().tolist()
     good_matches = [raw_matches[i] for i in range(len(raw_matches)) if matches_mask[i]]
+
+    # RMSE de reprojeção nos inliers 
+    inlier_src = src_xy[mask.ravel() == 1]
+    inlier_dst = dst_xy[mask.ravel() == 1]
+
+    # aplica M: [a b tx; c d ty]
+    pred = (inlier_src @ M[:, :2].T) + M[:, 2]
+    err = inlier_dst - pred
+    ransac_rmse = float((err[:, 0] ** 2 + err[:, 1] ** 2).mean() ** 0.5)
+
     
     print(f"[RANSAC] Filtrados {len(good_matches)} inliers de {len(raw_matches)} matches totais.")
 
@@ -141,6 +154,8 @@ def match_pair(tile_a, tile_b) -> int:
     group.attrs["tile_b"] = tile_b
     group.attrs["translation_matrix"] = matrix.tolist() # Converter para lista para JSON
     group.attrs["inlier_count"] = len(good_matches)
+    group.attrs["raw_match_count"] = int(raw_match_count)
+    group.attrs["ransac_rmse"] = float(ransac_rmse)
 
     print(f"[SALVO] {output_path} com matriz de transformação.")
     return 1

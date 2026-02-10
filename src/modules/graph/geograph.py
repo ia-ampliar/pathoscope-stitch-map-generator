@@ -5,6 +5,7 @@ import numpy as np
 import zarr
 import networkx as nx
 from pathlib import Path
+import math
 
 import logging
 import matplotlib.pyplot as plt
@@ -41,6 +42,52 @@ def _find_match_zarr_path(
         return path_b_a, "B__A"
 
     return None, None
+
+
+def ensure_min_degree_two(G_geo: nx.DiGraph, G_topo: nx.Graph, rejected_candidates: list, min_deg: int = 2) -> nx.DiGraph:
+    """
+    Garante que cada nó tenha grau (não-dirigido) >= min_deg no grafo geométrico.
+    Reintroduz arestas rejeitadas, priorizando maior weight.
+    """
+    G_und = G_geo.to_undirected()
+
+    # organiza candidatos por peso (maior primeiro)
+    rejected_candidates = sorted(rejected_candidates, key=lambda x: x[0], reverse=True)
+
+    # tenta recuperar arestas até estabilizar
+    changed = True
+    while changed:
+        changed = False
+        G_und = G_geo.to_undirected()
+
+        low_deg_nodes = [n for n in G_und.nodes() if G_und.degree(n) < min_deg]
+
+        if not low_deg_nodes:
+            break
+
+        low_set = set(low_deg_nodes)
+
+        for w, u, v, dx, dy, match_file, direction in rejected_candidates:
+            # só tenta se ajuda alguém com grau baixo
+            if (u not in low_set) and (v not in low_set):
+                continue
+
+            # se já existe conexão u-v (em qualquer direção), pula
+            if G_und.has_edge(u, v):
+                continue
+
+            # adiciona as duas direções para manter consistência
+            G_geo.add_edge(u, v, dx=dx, dy=dy, weight=w, match_file=match_file, match_direction=direction)
+            G_geo.add_edge(v, u, dx=-dx, dy=-dy, weight=w, match_file=match_file, match_direction=f"reverse_of_{direction}")
+
+            changed = True
+            # atualiza graus para sair mais rápido
+            G_und = G_geo.to_undirected()
+            # se já resolveu tudo, pode parar
+            if all(G_und.degree(n) >= min_deg for n in G_und.nodes()):
+                return G_geo
+
+    return G_geo
 
 
 def build_geometric_graph_translation(
@@ -81,6 +128,9 @@ def build_geometric_graph_translation(
     for node, attrs in G_topo.nodes(data=True):
         G_geo.add_node(node, **attrs)
 
+    rejected_candidates = []  
+    # cada item: (w, u, v, dx, dy, zarr_path_str, direction)
+
     # Percorrer todas as vizinhanças do grafo topológico
     for u, v in G_topo.edges():
         # Labels (nomes dos tiles) precisam existir no nó
@@ -106,7 +156,6 @@ def build_geometric_graph_translation(
         # Abrir o zarr e ler a matriz de translação
         root = zarr.open(str(zarr_path), mode="r")
         matches_group = root["matches"]
-        group = zarr.open_group(str(zarr_path), mode="r")
 
         if "translation_matrix" not in matches_group.attrs:
             logger.warning(
@@ -123,10 +172,68 @@ def build_geometric_graph_translation(
         dx = float(M[0, 2])
         dy = float(M[1, 2])
 
-        # Se o arquivo era tile_u__tile_v (A__B), então a translação lida é u -> v.
-        # Para obter u -> v, invertemos o sinal.
+        inlier_count = int(matches_group.attrs.get("inlier_count", 0))
+        raw_match_count = int(matches_group.attrs.get("raw_match_count", 0))
+        ransac_rmse = float(matches_group.attrs.get("ransac_rmse", float("inf")))
+
+        # Calcular o peso (w) baseado em inliers, matches brutos e erro RANSAC
+        # Exemplo simples: peso maior para maior número de inliers e melhor RANSAC
+        # Peso (w): protege divisão por zero e attrs ausentes
+        if raw_match_count <= 0:
+            w = 0.0
+        else:
+            w = (inlier_count / raw_match_count) * (1.0 / (1.0 + ransac_rmse))
+
+        # Sanitização do peso: evita NaN/inf e limita em [0, 1]
+        if not np.isfinite(w):
+            w = 0.0
+        else:
+            w = float(np.clip(w, 0.0, 1.0))
+
+        # Observação importante:
+        # - direction indica apenas QUAL arquivo foi encontrado:
+        #     "A__B" => existe "{tile_u}__{tile_v}.zarr"
+        #     "B__A" => existe "{tile_v}__{tile_u}.zarr"
+        # - O sentido físico de dx/dy (se é u->v ou v->u) depende da convenção usada
+        #   ao salvar a translation_matrix no match.py.
+        # - Por compatibilidade com o pipeline atual, aplicamos a correção de sinal abaixo.
         if direction == "A__B":
             dx, dy = -dx, -dy
+
+        shift = math.hypot(dx, dy)
+        if shift > Config.MAX_SHIFT:
+            logger.warning(
+                f"Descartando aresta (shift>MAX_SHIFT): {u}->{v} dx={dx:.2f} dy={dy:.2f} shift={shift:.2f} w={w:.4f} file={zarr_path.name}"
+            )
+            continue
+
+        # Identifica se a vizinhança é horizontal ou vertical usando as coords do grid
+        ux, uy = u
+        vx, vy = v
+
+        is_horizontal = (uy == vy) and (abs(ux - vx) == 1)
+        is_vertical   = (ux == vx) and (abs(uy - vy) == 1)
+
+        # Se por algum motivo não for 4-neighborhood, não aplica gate direcional
+        if is_horizontal:
+            if (abs(dx) < Config.MIN_MAIN) or (abs(dx) > Config.MAX_MAIN) or (abs(dy) > Config.MAX_ORTHO):
+                logger.warning(
+                    f"Descartando aresta (gate horizontal): {u}->{v} dx={dx:.2f} dy={dy:.2f} w={w:.4f} file={zarr_path.name}"
+                )
+                # guarda candidato rejeitado (para possível recuperação)
+                rejected_candidates.append((w, u, v, dx, dy, str(zarr_path), direction))
+                continue
+        elif is_vertical:
+            if (abs(dy) < Config.MIN_MAIN) or (abs(dy) > Config.MAX_MAIN) or (abs(dx) > Config.MAX_ORTHO):
+                logger.warning(
+                    f"Descartando aresta (gate vertical): {u}->{v} dx={dx:.2f} dy={dy:.2f} w={w:.4f} file={zarr_path.name}"
+                )
+                # guarda candidato rejeitado (para possível recuperação)
+                rejected_candidates.append((w, u, v, dx, dy, str(zarr_path), direction))
+                continue
+        else:
+            # não deveria acontecer no grafo topológico, mas mantemos seguro
+            pass
 
         # Criar as duas direções no grafo geométrico
         # u -> v
@@ -137,6 +244,7 @@ def build_geometric_graph_translation(
             dy=dy,
             match_file=str(zarr_path),
             match_direction=direction,  # útil para debug
+            weight=w,
         )
 
         # v -> u (inverso exato da translação)
@@ -146,8 +254,16 @@ def build_geometric_graph_translation(
             dx=-dx,
             dy=-dy,
             match_file=str(zarr_path),
-            match_direction=direction,
+            match_direction=f"reverse_of_{direction}",
+            weight=w,
         )
+
+    G_geo = ensure_min_degree_two(
+        G_geo=G_geo,
+        G_topo=G_topo,
+        rejected_candidates=rejected_candidates,
+        min_deg=2,
+    )
 
     logger.info(
         f"Grafo geométrico criado: {G_geo.number_of_nodes()} nós, {G_geo.number_of_edges()} arestas dirigidas."
@@ -270,8 +386,8 @@ def generate_geometric_graph():
 
 if __name__ == "__main__":
 
-    generate_geometric_graph()
     start_time = time.perf_counter()
+    generate_geometric_graph()
     
     # Configura o logging básico
     logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.DEBUG)

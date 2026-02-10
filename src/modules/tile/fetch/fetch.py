@@ -51,7 +51,7 @@ def main() -> None:
     logger.info("Iniciando extração dos metadados...")
 
     try:
-        count = extract_and_save_metadata(Config.TILES_DIR, Config.METADATA_FILE)
+        count = extract_and_save_metadata(Config.NORMALIZED_DIR, Config.METADATA_FILE)
         elapsed = time.perf_counter() - start_time
         logger.info(f"{count} imagens processadas em {elapsed:.4f} segundos.")
         logger.info(f"Metadados salvos em {Config.METADATA_FILE}")

@@ -41,7 +41,7 @@ def run_classification(parallel: bool = True, n_jobs: int = -1):
     Config.VALID_TILES_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     # Lista com os caminhos das imagens
-    image_paths = sorted(Config.TILES_DIR.glob("*.jpg"))
+    image_paths = sorted(Config.NORMALIZED_DIR.glob("*.jpg"))
 
     if parallel:
         results = Parallel(n_jobs=n_jobs)(

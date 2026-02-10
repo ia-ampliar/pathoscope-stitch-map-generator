@@ -12,7 +12,21 @@ class Config:
 
     # Diretórios
     BASE_DIR: Path = Path("output")
-    TILES_DIR: Path = BASE_DIR / "tiles"
+    BASE_DIRTILES_DIR: Path = BASE_DIR / "tiles"
+    TILES_DIR: Path = BASE_DIR / "tiles" / "src"
+    RAW_DIR: Path = BASE_DIR / "tiles" / "raw"
+    AVERAGE_DIR: Path = BASE_DIR / "tiles" / "average"
+    NORMALIZED_DIR: Path = BASE_DIR / "tiles" / "normalized"
+    # Onde as imagens classificadas serão salvas
+    CLASSIFIED_DIR: Path = BASE_DIR / "tiles" / "classified"
+
+    # Diretórios para etapas posteriores
+    FEATURES_DIR: Path = BASE_DIR / "features"
+    MATCHES_DIR: Path = BASE_DIR / "matches"
+    RESULT_DIR: Path = BASE_DIR / "result"
+
+    # Etapa de classificação
+    CLASSIFIER_MODEL_PATH: Path = BASE_DIR / "models" / "classifier_model.pkl"
 
     # Onde as imagens classificadas serão salvas
     CLASSIFIED_DIR: Path = BASE_DIR / "tmp" / "classified"
@@ -55,3 +69,8 @@ class Config:
     CANVAS_MAX_MATCHES_TO_DRAW = 20
     CANVAS_FILL_VALUE: int = 255
 
+    # limites conservadores (ajustáveis)
+    MAX_SHIFT: float = 2000.0          # limite duro do vetor
+    MAX_ORTHO: float = 200.0           # quanto aceitamos de "escorregão" no eixo ortogonal
+    MIN_MAIN: float = 600.0            # evita dx/dy ~0 em vizinho
+    MAX_MAIN: float = 1000.0           # evita saltos > ~1 tile
