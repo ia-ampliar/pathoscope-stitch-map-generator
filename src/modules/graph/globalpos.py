@@ -373,8 +373,8 @@ def compute_global_positions_robust_ls(
         if u not in idx or v not in idx:
             continue
         w = float(data.get("weight", 0.0))
-        if w <= min_weight:
-            continue
+        # if w <= min_weight:
+        #     continue
         u_list.append(idx[u])
         v_list.append(idx[v])
         dx_list.append(float(data.get("dx", 0.0)))

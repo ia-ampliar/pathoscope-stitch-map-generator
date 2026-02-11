@@ -25,6 +25,11 @@ class Config:
     MATCHES_DIR: Path = BASE_DIR / "matches"
     RESULT_DIR: Path = BASE_DIR / "result"
 
+    # Constants
+    DEFAULT_BRIGHTNESS_FACTOR: float = 0.9
+    DEFAULT_EPSILON: float = 1e-6
+    SUPPORTED_IMAGE_EXTENSIONS: tuple[str, ...] = (".jpg", ".jpeg", ".png")
+
     # Etapa de classificação
     CLASSIFIER_MODEL_PATH: Path = BASE_DIR / "models" / "classifier_model.pkl"
 
@@ -71,6 +76,6 @@ class Config:
 
     # limites conservadores (ajustáveis)
     MAX_SHIFT: float = 2000.0          # limite duro do vetor
-    MAX_ORTHO: float = 200.0           # quanto aceitamos de "escorregão" no eixo ortogonal
-    MIN_MAIN: float = 600.0            # evita dx/dy ~0 em vizinho
-    MAX_MAIN: float = 1000.0           # evita saltos > ~1 tile
+    MAX_ORTHO: float = 400.0           # quanto aceitamos de "escorregão" no eixo ortogonal
+    MIN_MAIN: float = 400.0            # evita dx/dy ~0 em vizinho
+    MAX_MAIN: float = 1400.0           # evita saltos > ~1 tile
