@@ -4,7 +4,7 @@ import numpy as np
 from .base import TileClassifier
 
 # Proporção mínima de pixels pretos (tecido) para considerar a imagem válida
-MIN_BLACK_RATIO = 0.01
+MIN_BLACK_RATIO = 0.1
 
 # Limite: pixels abaixo desse valor são considerados como tecido
 THRESHOLD_VALUE = 220

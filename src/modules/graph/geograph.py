@@ -124,15 +124,23 @@ def build_geometric_graph_translation(
     # Grafo geométrico: dirigido, pois translação tem sentido (u->v != v->u)
     G_geo = nx.DiGraph()
 
-    # Copiar nós e atributos do grafo topológico (mantém label/valid, etc.)
+    # Copiar APENAS nós válidos do grafo topológico (filtra por valid=True)
     for node, attrs in G_topo.nodes(data=True):
-        G_geo.add_node(node, **attrs)
+        if attrs.get("valid", False):  # Inclui apenas tiles válidos
+            G_geo.add_node(node, **attrs)
 
     rejected_candidates = []  
     # cada item: (w, u, v, dx, dy, zarr_path_str, direction)
 
     # Percorrer todas as vizinhanças do grafo topológico
+    # Mas apenas se ambos os nós são válidos
     for u, v in G_topo.edges():
+        # Verificar se ambos os nós são válidos
+        if not (G_topo.nodes[u].get("valid", False) and G_topo.nodes[v].get("valid", False)):
+            logger.warning(
+                f"Aresta ({u}, {v}) ignorada: pelo menos um dos nós é inválido."
+            )
+            continue
         # Labels (nomes dos tiles) precisam existir no nó
         tile_u = G_topo.nodes[u].get("label")
         tile_v = G_topo.nodes[v].get("label")

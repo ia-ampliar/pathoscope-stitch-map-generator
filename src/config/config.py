@@ -26,8 +26,8 @@ class Config:
     RESULT_DIR: Path = BASE_DIR / "result"
 
     # Constants
-    DEFAULT_BRIGHTNESS_FACTOR: float = 0.9
-    DEFAULT_EPSILON: float = 1e-6
+    DEFAULT_BRIGHTNESS_FACTOR: float = 0.8
+    DEFAULT_EPSILON: float = 1e-5
     SUPPORTED_IMAGE_EXTENSIONS: tuple[str, ...] = (".jpg", ".jpeg", ".png")
 
     # Etapa de classificação
@@ -76,6 +76,6 @@ class Config:
 
     # limites conservadores (ajustáveis)
     MAX_SHIFT: float = 2000.0          # limite duro do vetor
-    MAX_ORTHO: float = 400.0           # quanto aceitamos de "escorregão" no eixo ortogonal
-    MIN_MAIN: float = 400.0            # evita dx/dy ~0 em vizinho
+    MAX_ORTHO: float = 600.0           # quanto aceitamos de "escorregão" no eixo ortogonal
+    MIN_MAIN: float = 100.0            # evita dx/dy ~0 em vizinho
     MAX_MAIN: float = 1400.0           # evita saltos > ~1 tile

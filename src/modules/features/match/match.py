@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import zarr
 from joblib import Parallel, delayed
+import json
 
 from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
@@ -165,9 +166,17 @@ def match():
     print(f"[INÍCIO] Abertura do Zarr em: {Config.KEYPOINTS_ZARR_STORE}")
     Config.MATCHING_ZARR_PATH.mkdir(parents=True, exist_ok=True)
 
+    # Carregar tiles válidos
+    with open(Config.VALID_TILES_FILE) as f:
+        valid_tiles = json.load(f)
+    
     store = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="r")
-    tile_names = list(store.group_keys())
-    print(f"Tiles encontrados no Zarr: {len(tile_names)}")
+    all_tile_names = list(store.group_keys())
+    
+    # Filtrar apenas tiles válidos
+    tile_names = [tile for tile in all_tile_names if valid_tiles.get(tile, False)]
+    print(f"Tiles encontrados no Zarr: {len(all_tile_names)}")
+    print(f"Tiles válidos para matching: {len(tile_names)}")
 
     pattern = re.compile(Config.COORDINATES_PATTERN)
     tile_coords = {tile: extract_coordinates(tile, pattern) for tile in tile_names}
