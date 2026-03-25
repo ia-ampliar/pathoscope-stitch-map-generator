@@ -43,6 +43,7 @@ def match_pair(tile_a, tile_b) -> int:
         Config.MATCHER,
         algorithm=Config.DETECTION_ALGORITHM,
         ratio_thresh=Config.MATCHING_RATIO_THRESH,
+        
     )
     store = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="r")
 
@@ -57,7 +58,7 @@ def match_pair(tile_a, tile_b) -> int:
         print(f"Descritores vazios: {tile_a} ou {tile_b}")
         return 0
 
-    print(f"[MATCHING] {tile_a} <-> {tile_b}")
+    # print(f"[MATCHING] {tile_a} <-> {tile_b}")
     # Realiza o matching inicial (ex: KNN ou Brute Force)
     raw_matches = matcher.match(kp1, desc1, kp2, desc2)
 

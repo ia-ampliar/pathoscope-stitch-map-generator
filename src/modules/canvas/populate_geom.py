@@ -175,7 +175,7 @@ def export_bigtiff_rgb(canvas: np.memmap, out_path: Path) -> None:
     logger.info(f"[GEOM] BigTIFF salvo em: {out_path}")
 
 
-def main() -> None:
+def main(normalize: bool = True) -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] - %(message)s")
 
     # 1) Abre o canvas geométrico (memmap)
@@ -191,7 +191,10 @@ def main() -> None:
     logger.info(f"[GEOM] Grafo geométrico carregado: nós={G_geo.number_of_nodes()}, arestas={G_geo.number_of_edges()}")
 
     # 4) Resolve node -> imagem via label.*
-    node_to_path = resolve_node_to_image_path(G_geo, positions, Config.NORMALIZED_DIR)
+    if normalize:
+        node_to_path = resolve_node_to_image_path(G_geo, positions, Config.NORMALIZED_DIR)
+    else:
+        node_to_path = resolve_node_to_image_path(G_geo, positions, Config.TILES_DIR)
 
     sample = list(node_to_path.items())[:3]
     logger.info(f"[GEOM] Amostra node->path: {sample}")
@@ -219,7 +222,7 @@ def main() -> None:
 if __name__ == "__main__":
     start_time = time.perf_counter()
     # populate()
-    main()
+    main(False)
     end_time = time.perf_counter()
     elapsed = end_time - start_time
     print(f"Tempo total de execução: {elapsed:.2f} segundos")

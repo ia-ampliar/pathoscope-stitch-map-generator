@@ -26,8 +26,8 @@ class Config:
     RESULT_DIR: Path = BASE_DIR / "result"
 
     # Constants
-    DEFAULT_BRIGHTNESS_FACTOR: float = 0.8
-    DEFAULT_EPSILON: float = 1e-5
+    DEFAULT_BRIGHTNESS_FACTOR: float = 0.9
+    DEFAULT_EPSILON: float = 1e-6
     SUPPORTED_IMAGE_EXTENSIONS: tuple[str, ...] = (".jpg", ".jpeg", ".png")
 
     # Etapa de classificação
@@ -48,7 +48,7 @@ class Config:
     GLOBAL_POS_FILE: Path = BASE_DIR / "result" / "global_positions.pkl"
 
     # Etapa de detecção de keypoints
-    DETECTION_ALGORITHM: str = "orb"
+    DETECTION_ALGORITHM: str = "sift"
     DETECTION_N_JOBS: int = -1
     FEATURES_DIR: Path = BASE_DIR / "features"
     KEYPOINTS_ZARR_STORE: Path = FEATURES_DIR / "features.zarr"
