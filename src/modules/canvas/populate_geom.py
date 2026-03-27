@@ -222,7 +222,7 @@ def main(normalize: bool = True) -> None:
 if __name__ == "__main__":
     start_time = time.perf_counter()
     # populate()
-    main(False)
+    main()
     end_time = time.perf_counter()
     elapsed = end_time - start_time
     print(f"Tempo total de execução: {elapsed:.2f} segundos")
