@@ -26,8 +26,8 @@ class Config:
     RESULT_DIR: Path = BASE_DIR / "result"
 
     # Constants
-    DEFAULT_BRIGHTNESS_FACTOR: float = 0.9
-    DEFAULT_EPSILON: float = 1e-6
+    DEFAULT_BRIGHTNESS_FACTOR: float = 0.65
+    DEFAULT_EPSILON: float = 0.5e-4
     SUPPORTED_IMAGE_EXTENSIONS: tuple[str, ...] = (".jpg", ".jpeg", ".png")
 
     # Etapa de classificação
@@ -57,7 +57,10 @@ class Config:
     MATCHING_ZARR_PATH: Path = BASE_DIR / "matches"
     MATCHER: str = "bf"
     MATCHING_RATIO_THRESH: float = 0.5
-    MATCHING_N_JOBS = -1
+    MATCHING_N_JOBS: int = -1
+    MIN_MATCHES: int = 10
+    N_PIXELS: int = 5
+
 
     # Etapa de criação do canvas
     CANVAS_OUTPUT_PATH: Path = BASE_DIR / "tmp" / "canvas"

@@ -43,7 +43,6 @@ def match_pair(tile_a, tile_b) -> int:
         Config.MATCHER,
         algorithm=Config.DETECTION_ALGORITHM,
         ratio_thresh=Config.MATCHING_RATIO_THRESH,
-        
     )
     store = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="r")
 
@@ -54,60 +53,62 @@ def match_pair(tile_a, tile_b) -> int:
         print(f"Falha ao carregar dados: {tile_a} <-> {tile_b}. Erro: {e}")
         return 0
 
+    # Verifica se os descritores foram carregados corretamente
     if desc1 is None or desc2 is None or len(desc1) == 0 or len(desc2) == 0:
         print(f"Descritores vazios: {tile_a} ou {tile_b}")
         return 0
 
-    # print(f"[MATCHING] {tile_a} <-> {tile_b}")
-    # Realiza o matching inicial (ex: KNN ou Brute Force)
+    # Realiza o matching inicial (KNN ou Brute Force, com ratio test embutido no matcher)
     raw_matches = matcher.match(kp1, desc1, kp2, desc2)
-
-    # Quantidade total de matches encontrados
     raw_match_count = len(raw_matches)
-    
-    # É necessário um mínimo de 4 pontos para homografia robusta [7, 8]
-    if len(raw_matches) < 4:
-        print(f"Matches insuficientes para RANSAC: {len(raw_matches)}")
+
+    # Mínimo de matches para prosseguir
+    if raw_match_count < Config.MIN_MATCHES:
+        print(f"[REJEITADO] {tile_a} <-> {tile_b} — matches insuficientes: {raw_match_count}")
         return 0
 
-    # --- INÍCIO DO PROCESSO RANSAC ---
-    # 1. Extrair as coordenadas (x, y) dos pontos correspondentes [4]
-    src_pts = np.float32([kp1[m.queryIdx].pt for m in raw_matches]).reshape(-1, 1, 2)
-    dst_pts = np.float32([kp2[m.trainIdx].pt for m in raw_matches]).reshape(-1, 1, 2)
+    # --- ABORDAGEM MEDIANA (docs/tile.py) ---
+    # Deslocamento (dy, dx) de cada correspondência
+    dy_list = [kp1[m.queryIdx].pt[1] - kp2[m.trainIdx].pt[1] for m in raw_matches]
+    dx_list = [kp1[m.queryIdx].pt[0] - kp2[m.trainIdx].pt[0] for m in raw_matches]
 
-    # 2. Estimar a Transformação Afim com RANSAC para remover outliers [2, 3]
-    # O threshold de 5.0 define a tolerância de erro de reprojeção em pixels
+    med_y = float(np.median(dy_list))
+    med_x = float(np.median(dx_list))
 
-    # --- HOMOGRAFIA ---
-    # matrix, mask = cv2.findHomography(
-    #     src_pts, 
-    #     dst_pts, 
-    #     method=cv2.RANSAC, 
-    #     ransacReprojThreshold=5.0
-    # )
+    # Inliers: matches cujo deslocamento está dentro de ±N_PIXELS da mediana
+    inlier_flags = [
+        abs(dy - med_y) <= Config.N_PIXELS and abs(dx - med_x) <= Config.N_PIXELS
+        for dy, dx in zip(dy_list, dx_list)
+    ]
+    good_matches = [m for m, ok in zip(raw_matches, inlier_flags) if ok]
+    fraction_within = len(good_matches) / raw_match_count
 
-    # --- TRANSLAÇÃO FORÇADA ---
-    src_xy = src_pts.reshape(-1, 2).astype(np.float32)
-    dst_xy = dst_pts.reshape(-1, 2).astype(np.float32)
+    # Rejeita o par se menos de 50 % dos matches converge para a mesma translação
+    if fraction_within <= 0.5:
+        print(
+            f"[REJEITADO] {tile_a} <-> {tile_b} — "
+            f"apenas {fraction_within:.1%} dos matches dentro de ±{Config.N_PIXELS}px da mediana"
+        )
+        return 0
 
-    M, mask = cv2.estimateAffinePartial2D(
-        src_xy,
-        dst_xy,
-        method=cv2.RANSAC,
-        ransacReprojThreshold=5.0,
-        maxIters=2000,
-        confidence=0.99,
-        refineIters=10,
+    # Translação final = mediana dos deslocamentos (robusta a outliers pontuais)
+    dy = med_y
+    dx = med_x
+
+    # RMSE de dispersão dos inliers em torno da mediana (substitui ransac_rmse)
+    inlier_dy = [dy_list[i] for i, ok in enumerate(inlier_flags) if ok]
+    inlier_dx = [dx_list[i] for i, ok in enumerate(inlier_flags) if ok]
+    errs = [(d - med_y) ** 2 + (e - med_x) ** 2 for d, e in zip(inlier_dy, inlier_dx)]
+    median_spread = float(np.mean(errs) ** 0.5) if errs else 0.0
+
+    print(
+        f"[MEDIANA] {tile_a} <-> {tile_b} — "
+        f"dy={dy:.2f}px, dx={dx:.2f}px | "
+        f"inliers={len(good_matches)}/{raw_match_count} ({fraction_within:.1%}) | "
+        f"spread={median_spread:.2f}px"
     )
 
-    if M is None or mask is None:
-        print(f"Falha ao estimar translação robusta para {tile_a} e {tile_b}")
-        return 0
-
-    dx = float(M[0, 2])
-    dy = float(M[1, 2])
-
-    # 3) Construir matriz homogênea 3x3 APENAS de translação
+    # Matriz de translação homogênea 3×3
     matrix = np.array(
         [
             [1.0, 0.0, dx],
@@ -117,32 +118,12 @@ def match_pair(tile_a, tile_b) -> int:
         dtype=np.float64,
     )
 
-    # 4) Filtrar apenas os "inliers"
-    matches_mask = mask.ravel().tolist()
-    good_matches = [raw_matches[i] for i in range(len(raw_matches)) if matches_mask[i]]
-
-    # RMSE de reprojeção nos inliers 
-    inlier_src = src_xy[mask.ravel() == 1]
-    inlier_dst = dst_xy[mask.ravel() == 1]
-
-    # aplica M: [a b tx; c d ty]
-    pred = (inlier_src @ M[:, :2].T) + M[:, 2]
-    err = inlier_dst - pred
-    ransac_rmse = float((err[:, 0] ** 2 + err[:, 1] ** 2).mean() ** 0.5)
-
-    
-    print(f"[RANSAC] Filtrados {len(good_matches)} inliers de {len(raw_matches)} matches totais.")
-
-    if len(good_matches) == 0:
-        return 0
-
     # --- SALVAMENTO NO ZARR ---
     match_filename = f"{tile_a}__{tile_b}.zarr"
     output_path = Config.MATCHING_ZARR_PATH / match_filename
     match_zarr_store = zarr.open(output_path, mode="w")
     group = match_zarr_store.create_group("matches", overwrite=True)
 
-    # Salva apenas os índices dos matches validados pelo RANSAC 
     zarr.array(
         np.array([(m.queryIdx, m.trainIdx) for m in good_matches]),
         store=group.store,
@@ -151,13 +132,13 @@ def match_pair(tile_a, tile_b) -> int:
         dtype=int,
     )
 
-    # Armazena a matriz resultante como metadado para uso na costura (canvas.populate) 
+    # Metadados — contrato mantido para geograph.py / globalpos.py
     group.attrs["tile_a"] = tile_a
     group.attrs["tile_b"] = tile_b
-    group.attrs["translation_matrix"] = matrix.tolist() # Converter para lista para JSON
+    group.attrs["translation_matrix"] = matrix.tolist()
     group.attrs["inlier_count"] = len(good_matches)
     group.attrs["raw_match_count"] = int(raw_match_count)
-    group.attrs["ransac_rmse"] = float(ransac_rmse)
+    group.attrs["ransac_rmse"] = median_spread   # chave mantida; valor = spread mediana
 
     print(f"[SALVO] {output_path} com matriz de transformação.")
     return 1
