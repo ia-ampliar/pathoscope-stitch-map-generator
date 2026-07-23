@@ -82,6 +82,9 @@ class Config:
     CANVAS_PREVIEW_MAX_DIM: int = 4000  # dimensão máx. (px) do preview JPG (subamostragem)
     CANVAS_TIFF_TILE: int = 256         # tamanho do tile (px) na escrita do BigTIFF
 
+    # Reprodutibilidade
+    RANDOM_SEED: int = 42  # Seed para RANSAC (cv2) e numpy; garante resultados determinísticos
+
     # limites conservadores (ajustáveis)
     MAX_SHIFT: float = 2000.0          # limite duro do vetor
     MAX_ORTHO: float = 600.0           # quanto aceitamos de "escorregão" no eixo ortogonal

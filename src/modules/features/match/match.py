@@ -7,11 +7,14 @@ import numpy as np
 import zarr
 from joblib import Parallel, delayed
 import json
+import logging
 
 from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
 
 from .registry import get_matcher
+
+logger = logging.getLogger(__name__)
 
 
 # --- Singletons por processo (worker) ---------------------------------------
@@ -43,7 +46,7 @@ def _get_matcher():
 
 
 def load_keypoints_and_descriptors(zarr_store, tile_name: str):
-    print(f"Carregando keypoints e descritores de: {tile_name}")
+    logger.debug(f"Carregando keypoints e descritores de: {tile_name}")
     group = zarr_store[tile_name]
     kp_array = group["keypoints"][:]
     descriptors = group["descriptors"][:]
@@ -61,7 +64,7 @@ def load_keypoints_and_descriptors(zarr_store, tile_name: str):
         for row in kp_array
     ]
 
-    print(
+    logger.debug(
         f"Tile {tile_name}: {len(keypoints)} keypoints, descritores shape = {descriptors.shape}"
     )
     return keypoints, descriptors
@@ -84,11 +87,11 @@ def match_pair(tile_a, tile_b) -> int:
         kp1, desc1 = _load_kp_desc_cached(tile_a)
         kp2, desc2 = _load_kp_desc_cached(tile_b)
     except Exception as e:
-        print(f"Falha ao carregar dados: {tile_a} <-> {tile_b}. Erro: {e}")
+        logger.error(f"Falha ao carregar dados: {tile_a} <-> {tile_b}. Erro: {e}")
         return 0
 
     if desc1 is None or desc2 is None or len(desc1) == 0 or len(desc2) == 0:
-        print(f"Descritores vazios: {tile_a} ou {tile_b}")
+        logger.warning(f"Descritores vazios: {tile_a} ou {tile_b}")
         return 0
 
     # print(f"[MATCHING] {tile_a} <-> {tile_b}")
@@ -100,7 +103,7 @@ def match_pair(tile_a, tile_b) -> int:
     
     # É necessário um mínimo de pontos para estimativa robusta [7, 8]
     if len(raw_matches) < Config.MATCHING_MIN_MATCHES:
-        print(f"Matches insuficientes para RANSAC: {len(raw_matches)}")
+        logger.warning(f"Matches insuficientes para RANSAC: {len(raw_matches)}")
         return 0
 
     # --- INÍCIO DO PROCESSO RANSAC ---
@@ -134,7 +137,7 @@ def match_pair(tile_a, tile_b) -> int:
     )
 
     if M is None or mask is None:
-        print(f"Falha ao estimar translação robusta para {tile_a} e {tile_b}")
+        logger.warning(f"Falha ao estimar translação robusta para {tile_a} e {tile_b}")
         return 0
 
     dx = float(M[0, 2])
@@ -163,8 +166,7 @@ def match_pair(tile_a, tile_b) -> int:
     err = inlier_dst - pred
     ransac_rmse = float((err[:, 0] ** 2 + err[:, 1] ** 2).mean() ** 0.5)
 
-    
-    print(f"[RANSAC] Filtrados {len(good_matches)} inliers de {len(raw_matches)} matches totais.")
+    logger.info(f"[RANSAC] Filtrados {len(good_matches)} inliers de {len(raw_matches)} matches totais.")
 
     if len(good_matches) == 0:
         return 0
@@ -192,12 +194,16 @@ def match_pair(tile_a, tile_b) -> int:
     group.attrs["raw_match_count"] = int(raw_match_count)
     group.attrs["ransac_rmse"] = float(ransac_rmse)
 
-    print(f"[SALVO] {output_path} com matriz de transformação.")
+    logger.info(f"[SALVO] {output_path} com matriz de transformação.")
     return 1
 
 
 def match():
-    print(f"[INÍCIO] Abertura do Zarr em: {Config.KEYPOINTS_ZARR_STORE}")
+    # Fixar seeds para reprodutibilidade do RANSAC e operações numpy
+    cv2.setRNGSeed(Config.RANDOM_SEED)
+    np.random.seed(Config.RANDOM_SEED)
+
+    logger.info(f"[INÍCIO] Abertura do Zarr em: {Config.KEYPOINTS_ZARR_STORE}")
     Config.MATCHING_ZARR_PATH.mkdir(parents=True, exist_ok=True)
 
     # Carregar tiles válidos
@@ -209,8 +215,8 @@ def match():
     
     # Filtrar apenas tiles válidos
     tile_names = [tile for tile in all_tile_names if valid_tiles.get(tile, False)]
-    print(f"Tiles encontrados no Zarr: {len(all_tile_names)}")
-    print(f"Tiles válidos para matching: {len(tile_names)}")
+    logger.info(f"Tiles encontrados no Zarr: {len(all_tile_names)}")
+    logger.info(f"Tiles válidos para matching: {len(tile_names)}")
 
     pattern = re.compile(Config.COORDINATES_PATTERN)
     tile_coords = {tile: extract_coordinates(tile, pattern) for tile in tile_names}
@@ -225,16 +231,17 @@ def match():
                 pair = tuple(sorted((tile_name, neighbor_tile)))
                 tile_pairs.add(pair)
 
-    print(f"Total de pares únicos de vizinhos: {len(tile_pairs)}")
+    logger.info(f"Total de pares únicos de vizinhos: {len(tile_pairs)}")
 
     total_salvos = Parallel(n_jobs=Config.MATCHING_N_JOBS)(
         delayed(match_pair)(tile_a, tile_b) for tile_a, tile_b in sorted(tile_pairs)
     )
 
-    print(f"\n[FIM] Total de matches salvos: {sum(total_salvos)}")
+    logger.info(f"\n[FIM] Total de matches salvos: {sum(total_salvos)}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="[%(levelname)s] - %(message)s", level=logging.INFO)
     start_time = time.perf_counter()
     match()
     end_time = time.perf_counter()
