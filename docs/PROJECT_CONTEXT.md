@@ -46,6 +46,10 @@ Antes de qualquer matching, os tiles passam por um estágio de **normalização 
 > Todo o pipeline subsequente assume que as imagens já estão normalizadas.
 > 
 
+> ⚠️ **Nota de execução**
+> 
+> O pré-processamento (`preprocesser.py`) **não faz parte do pipeline automático** (`pipeline.py`). Deve ser executado manualmente antes de iniciar o pipeline, quando necessário. O pipeline automático assume que os tiles já estão disponíveis em `output/tiles/normalized/`.
+
 Esse estágio foi decisivo para:
 
 - eliminar mismatches em áreas de fundo,
