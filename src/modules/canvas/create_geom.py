@@ -67,7 +67,8 @@ def create_blank_canvas_geom(
 
     Fonte de verdade para o tamanho:
       - Config.GLOBAL_POS_FILE (positions globais)
-      - Um tile de amostra em Config.TILES_DIR (para tile_w/tile_h)
+      - Um tile de amostra em Config.NORMALIZED_DIR (para tile_w/tile_h),
+        o MESMO diretório que o populate_geom cola no canvas
     
     Salva:
       - Config.BLANK_CANVAS_GEOM_PATH  (memmap .dat)
@@ -92,9 +93,11 @@ def create_blank_canvas_geom(
     logger.info(f"[GEOM] Positions carregadas: {len(positions)}")
 
     # 2) escolher um tile de amostra (extensão-agnóstico)
-    tiles = list_tile_images(Config.TILES_DIR)
+    #    Usa o MESMO diretório que o populate_geom cola no canvas (NORMALIZED_DIR),
+    #    garantindo consistência de dimensão do tile entre criação e preenchimento.
+    tiles = list_tile_images(Config.NORMALIZED_DIR)
     if not tiles:
-        raise FileNotFoundError(f"Nenhuma imagem encontrada em {Config.TILES_DIR}")
+        raise FileNotFoundError(f"Nenhuma imagem encontrada em {Config.NORMALIZED_DIR}")
 
     sample_tile = tiles[0]
     tile_h, tile_w, channels = infer_tile_shape(sample_tile)
