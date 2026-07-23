@@ -12,11 +12,11 @@ O módulo `detect.py` é responsável pela **etapa de detecção de features** n
 
 1. Carrega os metadados dos tiles e a lista de tiles válidos (não descartados).
 2. Processa cada tile em **paralelo** (via `joblib.Parallel`).
-3. Detecta keypoints e calcula descritores usando um algoritmo configurável (ex.: SIFT, ORB, AKAZE).
+3. Detecta keypoints e calcula descritores usando um algoritmo configurável (SIFT ou ORB).
 4. Armazena os resultados em uma **estrutura Zarr** para acesso eficiente posterior.
 
 **Contexto no pipeline:**
-- Entrada: tiles em `output/tiles/` + metadados JSON.
+- Entrada: tiles normalizados em `output/tiles/normalized/` + metadados JSON (`output/metadata/dataset.json`).
 - Saída: `.zarr` centralizado em `output/features/` com keypoints e descritores por tile.
 - Próxima etapa: matching entre tiles vizinhos.
 
@@ -116,7 +116,9 @@ keypoints, descriptors = detector.detect_and_compute(img)
 
 - Usa o detector configurado para extrair features.
 - `keypoints`: lista de objetos `cv2.KeyPoint`.
-- `descriptors`: array numpy com descritores (ex.: 32 bytes por SIFT BRIEF).
+- `descriptors`: array numpy com descritores. O tamanho depende do algoritmo:
+  - **ORB**: 32 bytes por keypoint → shape `(N, 32)`, dtype nativo `uint8`.
+  - **SIFT**: 128 floats por keypoint → shape `(N, 128)`, dtype nativo `float32` (convertido para `uint8` no passo seguinte).
 
 #### Passo 5: Validar e converter para formato Zarr-compatível
 
@@ -152,7 +154,7 @@ else:
 
 **Conversão de descritores:**
 - Cast para `uint8` garante compatibilidade com armazenamento zarr.
-- Se 0 keypoints: array vazio `(0, 32)` como placeholder.
+- Se 0 keypoints: array vazio `(0, 32)` como placeholder (valor padrão; na prática, o tamanho da segunda dimensão depende do algoritmo usado: 32 para ORB, 128 para SIFT).
 
 **Flag `registered`:**
 - `True` se keypoints > 4 (tile tem features válidas).
@@ -218,7 +220,7 @@ def save_to_zarr(zarr_store, results):
 - Cria um **grupo Zarr** por tile (namespace isolado).
 - Armazena:
   - `/tile_name/keypoints` → array float32 `(n, 7)`
-  - `/tile_name/descriptors` → array uint8 `(n, 32)` (ou outro tamanho conforme algoritmo)
+  - `/tile_name/descriptors` → array uint8 `(n, D)` onde D depende do algoritmo: 32 para ORB, 128 para SIFT.
 - **Chunking:** tamanho do chunk = tamanho do array inteiro (sem fragmentação).
 
 ```python
@@ -228,7 +230,7 @@ def save_to_zarr(zarr_store, results):
 
 - Metadados por tile:
   - `registered`: booleano (tile teve features válidas?).
-  - `coordinates`: tupla ou lista de coordenadas (ex.: (x, y, z)).
+  - `coordinates`: tupla de coordenadas `(x, y)`.
 
 ### 4.3 Estrutura Zarr resultante
 
@@ -236,7 +238,7 @@ def save_to_zarr(zarr_store, results):
 output/features/features.zarr/
 ├── 00001_x1_y1_zp1/
 │   ├── keypoints    (array float32, shape: (N, 7))
-│   ├── descriptors  (array uint8, shape: (N, 32))
+│   ├── descriptors  (array uint8, shape: (N, D))  # D=32 para ORB, D=128 para SIFT
 │   └── attrs: {registered, coordinates}
 ├── 00002_x2_y1_zp1/
 │   └── ...
