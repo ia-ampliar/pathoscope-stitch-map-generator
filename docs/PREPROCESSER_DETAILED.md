@@ -2,16 +2,16 @@
 
 **Visão Geral**
 - **Arquivo:** `src/modules/tile/preprocessing/preprocesser.py`
-- **Propósito:** Fornece utilitários e pipeline para pré-processamento de tiles de imagem: leitura, cálculo de imagem média (normalização), normalização individual de tiles, movimentação de arquivos "raw" e orquestração do fluxo completo de pré-processamento.
-- **Efeito colateral principal:** escreve arquivos em diretórios controlados por `Config` (RAW_DIR, AVERAGE_DIR, NORMALIZED_DIR, CLASSIFIED_DIR etc.).
+- **Propósito:** Fornece utilitários e pipeline para pré-processamento de tiles de imagem: leitura, cálculo de imagem média (normalização), normalização individual de tiles e orquestração do fluxo completo de pré-processamento. Também disponibiliza um utilitário para organização de arquivos (`move_tiles_to_raw`), que **não** é chamado automaticamente pelo fluxo principal.
+- **Efeito colateral principal:** escreve arquivos em diretórios controlados por `Config` (AVERAGE_DIR, NORMALIZED_DIR).
 
 **Principais responsabilidades**
 - Ler imagens com segurança (`imread`).
 - Calcular imagem média a partir de um conjunto de tiles (`average_images`).
 - Normalizar imagens com base na imagem média (`normalize_image`).
-- Mover arquivos soltos para a pasta `raw` (`move_tiles_to_raw`).
 - Processar e salvar imagens normalizadas em paralelo (`process_and_save` + `Parallel`).
 - Orquestrar o pré-processamento completo (`run_preprocessing`).
+- (Utilitário avulso) Mover arquivos soltos para a pasta `raw` (`move_tiles_to_raw`) — **não** é chamado por `run_preprocessing`.
 
 **Dependências e configuração**
 - Usa OpenCV (`cv2`) para leitura/escrita e operações de imagem.
@@ -57,7 +57,7 @@
   - Propósito: Move arquivos soltos dentro da pasta `tiles` para `Config.RAW_DIR`.
   - Comportamento: cria `RAW_DIR` se necessário e usa `shutil.move` para cada arquivo.
   - Erro: Lança `FileNotFoundError` se `tiles_dir` não existir.
-  - Uso típico: organizar entrada antes do processamento automático.
+  - Uso típico: utilitário avulso para organização manual de arquivos antes do processamento. **Não é chamado por `run_preprocessing`.**
 
 - `process_and_save(img_path, norm_image, brightness_factor)`
   - Função auxiliar usada por `Parallel` que:
@@ -77,8 +77,10 @@
     6. Normaliza e salva todas as imagens em paralelo usando `joblib.Parallel(n_jobs=-1)` e `delayed(process_and_save)`.
   - Retorno: `Config.NORMALIZED_DIR` (Path para os arquivos normalizados).
   - Observações:
+    - **Nota:** `move_tiles_to_raw` **não** é chamada dentro de `run_preprocessing`. É um utilitário separado.
     - Paralelização em `Parallel(n_jobs=-1)` usa todos os núcleos disponíveis; pode aumentar uso de I/O simultâneo.
     - A função trata inconsistências de tamanho de imagem ao delegar a `average_images`.
+    - Este módulo **não faz parte do pipeline automático** (`pipeline.py`). Deve ser executado manualmente quando necessário.
 
 - Bloco `if __name__ == "__main__":`
   - Executa `run_preprocessing(Config.TILES_DIR)` com medição de tempo e configuração mínima de `logging`.
