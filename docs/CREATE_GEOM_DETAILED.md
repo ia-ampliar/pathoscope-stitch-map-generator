@@ -68,7 +68,7 @@
   - Evitar recomputar o memmap desnecessariamente usando `force_recompute=False` quando possível.
 
 **Limpezas e notas de manutenção**
-- A função `create()` usa `dask` e `da.full` mas não importa `dask.array as da` no topo; isso indica código legado ou incompleto. Se não for necessária, considerar remover para evitar confusão.
+- ⚠️ **Código legado:** A função `create()` usa `dask` e `da.full` mas não importa `dask.array as da` no topo do arquivo. Isso significa que chamar `create()` geraria um `NameError`. Esta função é **código morto/legado** e **não é utilizada pelo pipeline atual** (o fluxo principal usa `main()` → `create_blank_canvas_geom()`). Mantida no arquivo apenas como referência histórica.
 - O arquivo atual faz o trabalho principal diretamente em NumPy (`np.memmap`) — abordagem simples e portátil.
 - Verificar se `load_positions_pickle` valida o tipo de dados carregado para evitar problemas de casting.
 
@@ -87,8 +87,6 @@
 **Conclusão**
 - `create_geom.py` é o componente responsável por materializar no disco o canvas branco que servirá como base para compor o mosaico geométrico, dimensionado a partir das posições globais estimadas.
 - O design prioriza escalabilidade por uso de `np.memmap` e escrita em chunks.
-- Recomenda-se remover ou corrigir a função `create()` que referencia `dask` incompleto, e adicionar logs informativos caso o processo leve muito tempo (ex.: progresso por chunk).
+- A função `create()` presente no arquivo é **código legado não funcional** (import de `dask.array` ausente) e não deve ser utilizada. O ponto de entrada correto é `main()` → `create_blank_canvas_geom()`.
 
 ---
-
-Salvei este documento em docs/CREATE_GEOM_DETAILED.md. Deseja que eu abra o arquivo para revisão ou execute `create_blank_canvas_geom(force_recompute=True)` agora?

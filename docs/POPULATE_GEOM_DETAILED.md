@@ -96,5 +96,3 @@
 - O resultado (BigTIFF) é o produto final usado para inspeção ou entrada para etapas de processamento externo.
 
 ---
-
-Salvei este documento em [docs/POPULATE_GEOM_DETAILED.md](docs/POPULATE_GEOM_DETAILED.md). Deseja que eu abra o arquivo para revisão ou execute `main()` agora para gerar o preview e o BigTIFF?
