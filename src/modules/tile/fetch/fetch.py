@@ -56,7 +56,10 @@ def main() -> None:
         logger.info(f"{count} imagens processadas em {elapsed:.4f} segundos.")
         logger.info(f"Metadados salvos em {Config.METADATA_FILE}")
     except Exception as e:
+        # Propaga a falha (código de saída != 0) para que o orquestrador
+        # (pipeline.py) aborte, em vez de seguir sobre um dataset.json ausente.
         logger.error(f"Falha na execução: {e}")
+        raise
 
 
 if __name__ == "__main__":
