@@ -16,8 +16,8 @@ O módulo `fetch.py` é responsável pela **etapa de extração de metadados** n
 4. Persiste tudo em um JSON para consumo posterior.
 
 **Contexto no pipeline:**
-- Entrada: tiles normalizados em `output/tiles/` (resultado de `preprocesser`).
-- Saída: `tiles_metadata.json` em `output/metadata/`.
+- Entrada: tiles normalizados em `output/tiles/normalized/` (resultado de `preprocesser`).
+- Saída: `dataset.json` em `output/metadata/`.
 - Próxima etapa: classificação de tiles válidos (`classifier`).
 
 ---
@@ -131,13 +131,13 @@ for image in images:
 
 1. **Extração de coordenadas:**
    - `extract_coordinates(image, pattern)` analisa o nome do arquivo com regex.
-   - Espera-se que o padrão captures grupos (ex.: "00001_x1_y1_zp1.png" → (1, 1, 1)).
+   - Espera-se que o padrão capture 2 grupos (ex.: "00001_x1_y1_zp1.png" → (1, 1)).
    - Levanta `ValueError` se o nome não corresponde ao padrão.
 
 2. **Acúmulo de metadados:**
    - `name`: nome do arquivo (ex.: "00001_x1_y1_zp1.png").
-   - `path`: caminho absoluto como string (ex.: "/output/tiles").
-   - `coordinates`: tupla/lista extraída (ex.: (1, 1, 1)).
+   - `path`: caminho absoluto como string (ex.: "/output/tiles/normalized").
+   - `coordinates`: tupla extraída (ex.: (1, 1)).
 
 3. **Tratamento de erros:**
    - Se parsing falha (nome inválido), loga erro e continua.
@@ -148,13 +148,13 @@ for image in images:
 [
     {
         "name": "00001_x1_y1_zp1.png",
-        "path": "/home/user/output/tiles",
-        "coordinates": [1, 1, 1]
+        "path": "/home/user/output/tiles/normalized",
+        "coordinates": [1, 1]
     },
     {
         "name": "00002_x2_y1_zp1.png",
-        "path": "/home/user/output/tiles",
-        "coordinates": [2, 1, 1]
+        "path": "/home/user/output/tiles/normalized",
+        "coordinates": [2, 1]
     },
     ...
 ]
@@ -202,18 +202,18 @@ with open(output_path, "w") as f:
 - `json.dump` serializa lista para JSON com indentação (legibilidade).
 - File é fechado automaticamente ao sair do `with`.
 
-**Exemplo de saída (output/metadata/tiles_metadata.json):**
+**Exemplo de saída (output/metadata/dataset.json):**
 ```json
 [
   {
     "name": "00001_x1_y1_zp1.png",
-    "path": "/home/user/output/tiles",
-    "coordinates": [1, 1, 1]
+    "path": "/home/user/output/tiles/normalized",
+    "coordinates": [1, 1]
   },
   {
     "name": "00002_x2_y1_zp1.png",
-    "path": "/home/user/output/tiles",
-    "coordinates": [2, 1, 1]
+    "path": "/home/user/output/tiles/normalized",
+    "coordinates": [2, 1]
   }
 ]
 ```
@@ -296,7 +296,7 @@ def main() -> None:
 
 **Exemplo de log (falha):**
 ```
-[ERROR] - Falha na execução: Nenhuma imagem válida encontrada em output/tiles
+[ERROR] - Falha na execução: Nenhuma imagem válida encontrada em output/tiles/normalized
 ```
 
 ---
@@ -320,10 +320,10 @@ O arquivo depende dos seguintes valores em `src.config.config.Config`:
 
 | Parâmetro | Tipo | Descrição | Exemplo |
 |-----------|------|-----------|---------|
-| `NORMALIZED_DIR` | Path/str | Diretório contendo tiles normalizados. | `output/tiles` |
-| `METADATA_FILE` | Path/str | Caminho do arquivo JSON de saída. | `output/metadata/tiles_metadata.json` |
-| `SUPPORTED_EXTENSIONS` | List[str] | Extensões de imagem suportadas. | `[".png", ".jpg", ".tiff"]` |
-| `COORDINATES_PATTERN` | str (regex) | Padrão para extrair coordenadas do nome. | `r"(\d+)_x(\d+)_y(\d+)_zp(\d+)"` |
+| `NORMALIZED_DIR` | Path | Diretório contendo tiles normalizados. | `output/tiles/normalized` |
+| `METADATA_FILE` | Path | Caminho do arquivo JSON de saída. | `output/metadata/dataset.json` |
+| `SUPPORTED_EXTENSIONS` | List[str] | Extensões de imagem suportadas. | `[".png", ".jpg", ".jpeg", ".tif", ".tiff"]` |
+| `COORDINATES_PATTERN` | str (regex) | Padrão para extrair coordenadas (x, y) do nome. | `r".*_x(\d+)_y(\d+)_.*"` |
 
 ---
 
@@ -335,20 +335,20 @@ Embora não definida em `fetch.py`, é crítica para sua operação.
 
 ```python
 # Exemplo
-extract_coordinates("00001_x1_y1_zp1.png", r"(\d+)_x(\d+)_y(\d+)_zp(\d+)")
-# Retorna: [1, 1, 1] ou (1, 1, 1)
+extract_coordinates("00001_x1_y1_zp1.png", r".*_x(\d+)_y(\d+)_.*")
+# Retorna: (1, 1)
 ```
 
 - Recebe nome de arquivo e padrão regex.
 - Usa `re.search` para buscar matches.
-- Extrai grupos capturados (numeral entre parênteses no regex).
-- Retorna como lista/tupla ou levanta `ValueError` se nenhum match.
+- Extrai os dois grupos capturados (x e y).
+- Retorna como `Tuple[int, int]` ou levanta `ValueError` se nenhum match.
 
 ### 10.2 Tratamento de erros
 
 Se o padrão não corresponder:
 ```python
-raise ValueError(f"Nome de arquivo inválido: {image}")
+raise ValueError(f"Formato inválido: '{filename}' não contém coordenadas com o padrão '{pattern}'.")
 ```
 
 Exemplo: arquivo chamado "image.png" (sem coordenadas) → ValueError → ignorado em `generate_metadata`.
@@ -358,7 +358,7 @@ Exemplo: arquivo chamado "image.png" (sem coordenadas) → ValueError → ignora
 ## 11. Fluxo de dados resumido
 
 ```
-output/tiles/ (diretório com N arquivos de imagem)
+output/tiles/normalized/ (diretório com N arquivos de imagem)
          ↓
    list_image_files()
    → filtra por extensão suportada
@@ -377,7 +377,7 @@ output/tiles/ (diretório com N arquivos de imagem)
    → cria diretórios necessários
    → serializa JSON com indent=2
          ↓
-   output/metadata/tiles_metadata.json
+   output/metadata/dataset.json
 ```
 
 ---
@@ -436,10 +436,10 @@ from pathlib import Path
 from src.config.config import Config
 
 # Configurar (ou verificar se já está em Config)
-Config.NORMALIZED_DIR = Path("output/tiles")
-Config.METADATA_FILE = Path("output/metadata/tiles_metadata.json")
-Config.SUPPORTED_EXTENSIONS = [".png", ".jpg", ".tiff"]
-Config.COORDINATES_PATTERN = r"(\d+)_x(\d+)_y(\d+)_zp(\d+)"
+Config.NORMALIZED_DIR = Path("output/tiles/normalized")
+Config.METADATA_FILE = Path("output/metadata/dataset.json")
+Config.SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".tif", ".tiff"]
+Config.COORDINATES_PATTERN = r".*_x(\d+)_y(\d+)_.*"
 ```
 
 ### Execução
@@ -466,11 +466,11 @@ for tile in metadata[:5]:  # Primeiros 5
 **Exemplo de saída:**
 ```
 Total de tiles: 150
-  00001_x1_y1_zp1.png @ [1, 1, 1]
-  00002_x2_y1_zp1.png @ [2, 1, 1]
-  00003_x3_y1_zp1.png @ [3, 1, 1]
-  00004_x4_y1_zp1.png @ [4, 1, 1]
-  00005_x5_y1_zp1.png @ [5, 1, 1]
+  00001_x1_y1_zp1.png @ [1, 1]
+  00002_x2_y1_zp1.png @ [2, 1]
+  00003_x3_y1_zp1.png @ [3, 1]
+  00004_x4_y1_zp1.png @ [4, 1]
+  00005_x5_y1_zp1.png @ [5, 1]
 ```
 
 ---
@@ -479,10 +479,10 @@ Total de tiles: 150
 
 ### Inputs (dependências anteriores)
 - `src.modules.initializer.initialize_structure` → cria `output/` e pastas.
-- `src.modules.tile.preprocessing.preprocesser` → normaliza e armazena tiles em `output/tiles/`.
+- `src.modules.tile.preprocessing.preprocesser` → normaliza e armazena tiles em `output/tiles/normalized/`.
 
 ### Outputs (fornecidos para próximo passo)
-- `output/metadata/tiles_metadata.json` → consumido por `src.modules.tile.classify.classifier` e indiretamente por `src.modules.features.detect.detect`.
+- `output/metadata/dataset.json` → consumido por `src.modules.tile.classify.classifier` e indiretamente por `src.modules.features.detect.detect`.
 
 ### Próximo passo
 - **Classificação:** valida tiles e determina quais serão usados no matching.
@@ -497,13 +497,13 @@ Total de tiles: 150
 [
   {
     "name": "00001_x1_y1_zp1.png",
-    "path": "/absolute/path/to/output/tiles",
-    "coordinates": [1, 1, 1]
+    "path": "/absolute/path/to/output/tiles/normalized",
+    "coordinates": [1, 1]
   },
   {
     "name": "00002_x2_y1_zp1.png",
-    "path": "/absolute/path/to/output/tiles",
-    "coordinates": [2, 1, 1]
+    "path": "/absolute/path/to/output/tiles/normalized",
+    "coordinates": [2, 1]
   },
   ...
 ]
@@ -511,8 +511,8 @@ Total de tiles: 150
 
 ### Notas
 
-- Array ordenado (mesma ordem de `listdir()`; geralmente alfabética no POSIX, pode variar no Windows).
-- `coordinates` é lista (JSON não tem tuplas).
+- Array ordenado (mesma ordem de `iterdir()`; geralmente alfabética no POSIX, pode variar no Windows).
+- `coordinates` é lista de 2 elementos `[x, y]` (JSON não tem tuplas).
 - `path` é string do caminho absoluto ou relativo (conforme `Config.NORMALIZED_DIR`).
 
 ---
