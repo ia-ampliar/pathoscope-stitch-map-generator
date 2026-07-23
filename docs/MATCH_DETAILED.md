@@ -382,16 +382,25 @@ Config.MATCHING_ZARR_PATH.mkdir(parents=True, exist_ok=True)
 
 - Cria diretório de saída se não existir.
 
-#### Passo 2: Carregar features
+#### Passo 2: Carregar features e filtrar tiles válidos
 
 ```python
+with open(Config.VALID_TILES_FILE) as f:
+    valid_tiles = json.load(f)
+
 store = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="r")
-tile_names = list(store.group_keys())
-print(f"Tiles encontrados no Zarr: {len(tile_names)}")
+all_tile_names = list(store.group_keys())
+
+# Filtrar apenas tiles válidos
+tile_names = [tile for tile in all_tile_names if valid_tiles.get(tile, False)]
+print(f"Tiles encontrados no Zarr: {len(all_tile_names)}")
+print(f"Tiles válidos para matching: {len(tile_names)}")
 ```
 
 - Abre store zarr de features (resultado de `detect.py`).
-- Lista nomes de tiles com features.
+- Carrega `valid_tiles.json` (resultado de `classifier`) para filtrar tiles inválidos.
+- Apenas tiles marcados como `True` em `valid_tiles` participam do matching.
+- Isso evita processamento desnecessário de tiles sem conteúdo significativo.
 
 #### Passo 3: Extrair coordenadas dos tiles
 
