@@ -177,7 +177,7 @@ def build_graph(valid_tiles: Dict[str, bool], pattern: re.Pattern) -> nx.Graph:
 
 **Parâmetros:**
 - `valid_tiles`: dicionário com tiles e seus status.
-- `pattern`: regex compilado para extrair coordenadas (ex.: `(\d+)_x(\d+)_y(\d+)_zp(\d+)`).
+- `pattern`: regex compilado para extrair coordenadas (ex.: `r".*_x(\d+)_y(\d+)_.*"`).
 
 **Retorna:** grafo topológico (nx.Graph, não dirigido).
 
@@ -206,7 +206,7 @@ for tile_name, is_valid in valid_tiles.items():
 **Lógica por tile:**
 
 1. **Extrair coordenadas:** `extract_coordinates()` usa regex para obter (x, y) de nome como "00001_x1_y1_zp1".
-   - Resultado: tupla ou lista (ex.: `[1, 1]` ou `(1, 1)`).
+   - Resultado: `Tuple[int, int]` (ex.: `(1, 1)`).
 
 2. **Validação:** se `coord` é truthy (não None/vazio), prossegue.
 
