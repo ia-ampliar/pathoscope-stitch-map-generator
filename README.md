@@ -43,15 +43,19 @@ Para criar a estrutura de diretórios necessária para a execução do pipeline 
 python -m src.modules.initializer.initialize_structure
 ```
 
-Após a criação da estrutura de diretórios, insira os tiles em `output/tiles`
+Após a criação da estrutura de diretórios, insira os tiles em `output/tiles/src`
 
-## 3. Normalizaço dos tiles
+## 3. Normalização dos tiles (opcional — executar manualmente)
 
-Para realizar a normalização dos tiles execute o módulo tile.preprocessing.preprocessing
+A normalização fotométrica dos tiles é um passo **manual e opcional**. Ela não faz parte do pipeline automático (`pipeline.py`), mas é recomendada para melhorar a qualidade dos matches em imagens com variações de iluminação.
+
+Para executar:
 
 ```bash
 python -m src.modules.tile.preprocessing.preprocesser
 ```
+
+> **Nota:** O pipeline automático (`src/pipeline.py`) assume que os tiles já estão disponíveis em `output/tiles/src` (originais) e que os normalizados serão gravados em `output/tiles/normalized`. As etapas subsequentes (fetch, classify, detect) operam sobre os tiles normalizados.
 
 ## 4. Extração de metadados dos tiles
 
