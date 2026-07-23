@@ -60,14 +60,14 @@
   2. Mover para `Config` (agrupados por etapa): `MIN_BLACK_RATIO`, `THRESHOLD_VALUE`, parâmetros do RANSAC (`ransacReprojThreshold`, `maxIters`, `confidence`, `refineIters`), o mínimo de matches (`< 4`) e o mínimo de keypoints (`> 4`).
 - **Critério de aceitação:** cada parâmetro existe uma única vez no `Config`; nenhum literal de threshold permanece embutido nos módulos de etapa.
 
-### ⬜ H1-04 — Remover/isolar código morto e quebrado
+### ✅ H1-04 — Remover/isolar código morto e quebrado
 - **Tipo:** `fato` · **Impacto:** Baixo · **Esforço:** Baixo
 - **Problema:** código que não roda e confunde diagnóstico e manutenção.
 - **Evidência:** `src/modules/canvas/create_geom.py:171` (`da.full` sem `import dask` → `NameError`); `src/modules/canvas/create_grid.py:64`; `src/modules/features/match/ransac.py:19` (artefatos de citação `[2, 6]` no meio do código); `src/modules/canvas/populate.py` (colagem em grade, legado).
 - **Intervenção:** remover a função `create()` de `create_geom.py`; mover utilitários legados/experimentais para um diretório `legacy/` ou excluí-los, conforme decisão do mantenedor.
 - **Critério de aceitação:** nenhum símbolo referenciado no fluxo aponta para código com import ausente; `create_geom.py` mantém apenas `create_blank_canvas_geom` + `main`.
 
-### ⬜ H1-05 — Fixar seed para reprodutibilidade do RANSAC
+### ✅ H1-05 — Fixar seed para reprodutibilidade do RANSAC
 - **Tipo:** `recomendação` · **Impacto:** Baixo · **Esforço:** Baixo
 - **Problema:** o RANSAC é estocástico e não há semente fixada, tornando execuções não determinísticas.
 - **Evidência:** ausência de `random.seed`/`cv2.setRNGSeed` no repositório; uso do RANSAC em `src/modules/features/match/match.py:93`.
@@ -80,7 +80,7 @@
 
 > Orquestração, configuração e contratos de dados. Reduzem acoplamento e custo de manutenção.
 
-### ⬜ H2-01 — Padronizar logging e observabilidade
+### ✅ H2-01 — Padronizar logging e observabilidade
 - **Tipo:** `fato` · **Impacto:** Médio · **Esforço:** Baixo
 - **Problema:** observabilidade inconsistente — alguns módulos usam `logging`, outros usam `print`.
 - **Evidência:** `src/modules/features/match/match.py` e `src/modules/canvas/populate.py` usam `print`; `fetch`, `classifier`, `graph`, `geograph`, `globalpos` usam `logging`.
@@ -176,11 +176,11 @@
 - [x] H1-01 Propagar falhas no `fetch`
 - [x] H1-02 Validar contrato de diretórios `src`/`normalized`
 - [x] H1-03 Limpar duplicatas e centralizar magic numbers
-- [ ] H1-04 Remover/isolar código morto e quebrado
-- [ ] H1-05 Fixar seed do RANSAC
+- [x] H1-04 Remover/isolar código morto e quebrado
+- [x] H1-05 Fixar seed do RANSAC
 
 **Horizonte 2**
-- [ ] H2-01 Padronizar logging
+- [x] H2-01 Padronizar logging
 - [ ] H2-02 Contratos de dados com validação de schema
 - [x] H2-03 Otimizar I/O do matching
 - [x] H2-04 Exportação do canvas por blocos
