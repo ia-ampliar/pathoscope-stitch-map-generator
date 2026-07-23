@@ -1,7 +1,6 @@
 # src/modules/canvas/create_geom.py
 
 import logging
-import pickle
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -157,40 +156,6 @@ def create_blank_canvas_geom(
 
     return memmap_path, canvas_shape
 
-
-
-def create():
-    Config.CANVAS_OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
-
-    CHUNK_SIZE = Config.CANVAS_CHUNK_SIZE
-
-    # Determina o shape do canvas final
-    canvas_shape = create_blank_canvas_shape_from_tiles(
-        Config.TILES_DIR, Config.CANVAS_GAP
-    )
-    print("Shape do canvas:", canvas_shape)
-
-    # Criação do Dask array
-    darr = da.full(
-        canvas_shape, fill_value=255, dtype=np.uint8, chunks=Config.CANVAS_CHUNK_SIZE
-    )
-
-    # Criação do arquivo memmap
-    memmap_img = np.memmap(
-        Config.BLANK_CANVAS_PATH, dtype=np.uint8, mode="w+", shape=canvas_shape
-    )
-
-    # Preenche o memmap com o conteúdo do Dask array (vazio por enquanto)
-    for i in range(0, canvas_shape[0], CHUNK_SIZE[0]):
-        for j in range(0, canvas_shape[1], CHUNK_SIZE[1]):
-            bloco = darr[i : i + CHUNK_SIZE[0], j : j + CHUNK_SIZE[1]].compute()
-            memmap_img[i : i + CHUNK_SIZE[0], j : j + CHUNK_SIZE[1]] = bloco
-
-    memmap_img.flush()
-    print(f"Memmap salvo em: {Config.BLANK_CANVAS_PATH}")
-
-    # Salva o shape do canvas para uso posterior
-    np.save(Config.CANVAS_OUTPUT_PATH / "canvas_shape.npy", canvas_shape)
 
 
 def main() -> None:
