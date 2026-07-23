@@ -1,5 +1,6 @@
 import re
 import time
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -11,6 +12,34 @@ from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
 
 from .registry import get_matcher
+
+
+# --- Singletons por processo (worker) ---------------------------------------
+# Em execução paralela (joblib/loky), cada worker é um processo separado e
+# inicializa seu próprio store/matcher sob demanda. Isso evita reabrir o store
+# Zarr e reinstanciar o matcher a cada par de tiles.
+_STORE = None
+_MATCHER = None
+
+
+def _get_store():
+    """Abre o store Zarr de features uma única vez por processo."""
+    global _STORE
+    if _STORE is None:
+        _STORE = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="r")
+    return _STORE
+
+
+def _get_matcher():
+    """Instancia o matcher uma única vez por processo."""
+    global _MATCHER
+    if _MATCHER is None:
+        _MATCHER = get_matcher(
+            Config.MATCHER,
+            algorithm=Config.DETECTION_ALGORITHM,
+            ratio_thresh=Config.MATCHING_RATIO_THRESH,
+        )
+    return _MATCHER
 
 
 def load_keypoints_and_descriptors(zarr_store, tile_name: str):
@@ -38,18 +67,22 @@ def load_keypoints_and_descriptors(zarr_store, tile_name: str):
     return keypoints, descriptors
 
 
+@lru_cache(maxsize=None)
+def _load_kp_desc_cached(tile_name: str):
+    """Cache por processo: cada tile é lido no máximo uma vez por worker.
+
+    Como cada tile participa de até 4 pares vizinhos, o cache elimina a
+    releitura redundante de keypoints/descritores do mesmo tile.
+    """
+    return load_keypoints_and_descriptors(_get_store(), tile_name)
+
+
 def match_pair(tile_a, tile_b) -> int:
-    matcher = get_matcher(
-        Config.MATCHER,
-        algorithm=Config.DETECTION_ALGORITHM,
-        ratio_thresh=Config.MATCHING_RATIO_THRESH,
-        
-    )
-    store = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="r")
+    matcher = _get_matcher()
 
     try:
-        kp1, desc1 = load_keypoints_and_descriptors(store, tile_a)
-        kp2, desc2 = load_keypoints_and_descriptors(store, tile_b)
+        kp1, desc1 = _load_kp_desc_cached(tile_a)
+        kp2, desc2 = _load_kp_desc_cached(tile_b)
     except Exception as e:
         print(f"Falha ao carregar dados: {tile_a} <-> {tile_b}. Erro: {e}")
         return 0
@@ -65,8 +98,8 @@ def match_pair(tile_a, tile_b) -> int:
     # Quantidade total de matches encontrados
     raw_match_count = len(raw_matches)
     
-    # É necessário um mínimo de 4 pontos para homografia robusta [7, 8]
-    if len(raw_matches) < 4:
+    # É necessário um mínimo de pontos para estimativa robusta [7, 8]
+    if len(raw_matches) < Config.MATCHING_MIN_MATCHES:
         print(f"Matches insuficientes para RANSAC: {len(raw_matches)}")
         return 0
 
@@ -94,10 +127,10 @@ def match_pair(tile_a, tile_b) -> int:
         src_xy,
         dst_xy,
         method=cv2.RANSAC,
-        ransacReprojThreshold=5.0,
-        maxIters=2000,
-        confidence=0.99,
-        refineIters=10,
+        ransacReprojThreshold=Config.RANSAC_REPROJ_THRESHOLD,
+        maxIters=Config.RANSAC_MAX_ITERS,
+        confidence=Config.RANSAC_CONFIDENCE,
+        refineIters=Config.RANSAC_REFINE_ITERS,
     )
 
     if M is None or mask is None:
