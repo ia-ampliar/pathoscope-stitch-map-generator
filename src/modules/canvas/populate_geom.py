@@ -142,35 +142,51 @@ def paste_tiles_overwrite(
 
 def export_preview_jpg(canvas: np.memmap, out_path: Path, quality: int = 95) -> None:
     """
-    Exporta um preview JPG do canvas.
+    Exporta um preview JPG do canvas por SUBAMOSTRAGEM.
+
+    Em vez de materializar o canvas inteiro em RAM (np.asarray), lê apenas os
+    pixels de um passo (step) direto do memmap, produzindo uma cópia reduzida
+    cujo maior lado fica em torno de Config.CANVAS_PREVIEW_MAX_DIM. Assim o
+    pico de RAM é O(preview), não O(mosaico inteiro).
     O canvas está em RGB; o OpenCV salva em BGR, então convertemos.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    canvas_rgb = np.asarray(canvas)  # cria uma view/array em memória (para esse tamanho é ok)
-    canvas_bgr = cv2.cvtColor(canvas_rgb, cv2.COLOR_RGB2BGR)
+    H, W = canvas.shape[:2]
+    max_dim = int(getattr(Config, "CANVAS_PREVIEW_MAX_DIM", 4000))
+    step = max(1, int(np.ceil(max(H, W) / max_dim)))
 
-    ok = cv2.imwrite(str(out_path), canvas_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+    # Slicing com passo no memmap materializa somente os pixels amostrados.
+    small_rgb = np.array(canvas[::step, ::step, :])
+    small_bgr = cv2.cvtColor(small_rgb, cv2.COLOR_RGB2BGR)
+
+    ok = cv2.imwrite(str(out_path), small_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
     if not ok:
         raise RuntimeError(f"Falha ao salvar preview JPG em: {out_path}")
 
-    logger.info(f"[GEOM] Preview JPG salvo em: {out_path}")
+    logger.info(
+        f"[GEOM] Preview JPG salvo em: {out_path} (step={step}, shape={small_rgb.shape})"
+    )
 
 
 def export_bigtiff_rgb(canvas: np.memmap, out_path: Path) -> None:
     """
-    Exporta um BigTIFF RGB.
-    Útil para mosaicos grandes.
+    Exporta um BigTIFF RGB gravando em tiles.
+
+    O memmap é passado diretamente ao tifffile (sem np.asarray), e a escrita
+    tile a tile lê fatias do memmap sob demanda — evitando materializar o
+    mosaico inteiro em RAM. Útil para mosaicos grandes.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    canvas_rgb = np.asarray(canvas)
+    tile_size = int(getattr(Config, "CANVAS_TIFF_TILE", 256))
     tifffile.imwrite(
         str(out_path),
-        canvas_rgb,
+        canvas,
         photometric="rgb",
         bigtiff=True,
         compression="jpeg",
+        tile=(tile_size, tile_size),
     )
     logger.info(f"[GEOM] BigTIFF salvo em: {out_path}")
 
