@@ -34,6 +34,7 @@
   - Propaga posições por BFS a partir do `root`: para cada aresta u->v, define position[v] = position[u] + (dx, dy) na primeira visita.
   - Simples, rápida, porém sensível a inconsistências quando há ciclos e outliers nas arestas.
   - Retorna `unreachable` com nós desconectados do componente do root.
+  - **Nota:** Esta função existe como fallback/legado. O fluxo principal (`generate_global_positions`) utiliza o solver robusto `compute_global_positions_robust_ls` por padrão.
 
 - `compute_global_positions_robust_ls(G_geo, root=None, root_strategy="center_valid", max_iters=8, huber_k=2.5, min_weight=1e-6, residual_gate_px=200.0, gate_after_iter=1) -> (positions, root, unreachable)`
   - Solver robusto baseado em formulação linear:
@@ -137,5 +138,3 @@
 - O módulo foi escrito com atenção a logs diagnósticos e segurança no salvamento/carregamento de resultados.
 
 ---
-
-Salvei este documento em [docs/GLOBALPOS_DETAILED.md](docs/GLOBALPOS_DETAILED.md). Deseja que eu abra o arquivo para revisão ou rode `generate_global_positions(force_recompute=True)` agora?
