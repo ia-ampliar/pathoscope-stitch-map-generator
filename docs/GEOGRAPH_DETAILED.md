@@ -222,21 +222,30 @@ if not matches_dir.exists():
 
 G_geo = nx.DiGraph()
 
+# Copiar APENAS nós válidos do grafo topológico (filtra por valid=True)
 for node, attrs in G_topo.nodes(data=True):
-    G_geo.add_node(node, **attrs)
+    if attrs.get("valid", False):  # Inclui apenas tiles válidos
+        G_geo.add_node(node, **attrs)
 
 rejected_candidates = []
 ```
 
 - Valida existência de matches.
 - Cria grafo dirigido vazio.
-- Copia nós e atributos do topológico.
+- Copia **apenas** nós com atributo `valid=True` do topológico (tiles inválidos são excluídos do grafo geométrico).
 - Inicializa lista de rejeitados (para recuperação).
 
 #### Passo 2: Iterar sobre vizinhanças do topológico
 
 ```python
 for u, v in G_topo.edges():
+    # Verificar se ambos os nós são válidos
+    if not (G_topo.nodes[u].get("valid", False) and G_topo.nodes[v].get("valid", False)):
+        logger.warning(
+            f"Aresta ({u}, {v}) ignorada: pelo menos um dos nós é inválido."
+        )
+        continue
+
     tile_u = G_topo.nodes[u].get("label")
     tile_v = G_topo.nodes[v].get("label")
 
@@ -245,7 +254,8 @@ for u, v in G_topo.edges():
         continue
 ```
 
-- Para cada vizinhança no topológico, extrai labels dos tiles.
+- Para cada vizinhança no topológico, verifica primeiro se **ambos os nós são válidos** (caso contrário, a aresta é ignorada).
+- Em seguida, extrai labels dos tiles.
 - Rejeita se labels faltam (nó sem correspondência em matches).
 
 #### Passo 3: Localizar arquivo de match
