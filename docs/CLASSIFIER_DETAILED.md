@@ -16,8 +16,8 @@ O módulo `classifier.py` é responsável pela **etapa de classificação e filt
 4. Persiste um dicionário booleano em JSON com tiles válidos/inválidos.
 
 **Contexto no pipeline:**
-- Entrada: tiles normalizados em `output/tiles/` (resultado de `preprocesser`).
-- Saída: `valid_tiles.json` em `output/metadata/` + imagens de debug em `output/classified/`.
+- Entrada: tiles normalizados em `output/tiles/normalized/` (resultado de `preprocesser`).
+- Saída: `valid_tiles.json` em `output/metadata/` + imagens de debug em `output/tmp/classified/`.
 - Próxima etapa: detecção de features (apenas em tiles válidos).
 
 ---
@@ -304,8 +304,8 @@ O arquivo depende dos seguintes valores em `src.config.config.Config`:
 
 | Parâmetro | Tipo | Descrição | Exemplo |
 |-----------|------|-----------|---------|
-| `NORMALIZED_DIR` | Path | Diretório com tiles normalizados (`.jpg`). | `output/tiles` |
-| `CLASSIFIED_DIR` | Path | Diretório para salvar imagens de debug. | `output/classified` |
+| `NORMALIZED_DIR` | Path | Diretório com tiles normalizados (`.jpg`). | `output/tiles/normalized` |
+| `CLASSIFIED_DIR` | Path | Diretório para salvar imagens de debug. | `output/tmp/classified` |
 | `VALID_TILES_FILE` | Path | Caminho do JSON com resultado da classificação. | `output/metadata/valid_tiles.json` |
 
 **Nota:** `ThresholdClassifier` pode usar valores adicionais do Config para tuning (ex.: `WHITE_THRESHOLD`, `MIN_CONTENT_PERCENTAGE`).
@@ -315,7 +315,7 @@ O arquivo depende dos seguintes valores em `src.config.config.Config`:
 ## 8. Fluxo de dados resumido
 
 ```
-output/tiles/ (N arquivos .jpg normalizados)
+output/tiles/normalized/ (N arquivos .jpg normalizados)
          ↓
    sorted().glob("*.jpg")
          ↓
@@ -325,7 +325,7 @@ output/tiles/ (N arquivos .jpg normalizados)
       - instantiate ThresholdClassifier
       - load image (BGR)
       - classify(image) -> (is_valid, binary_debug)
-      - save binary_debug to output/classified/
+      - save binary_debug to output/tmp/classified/
       - cleanup memory
       - return (tile_name, is_valid)
          ↓
