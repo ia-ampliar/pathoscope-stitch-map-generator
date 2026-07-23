@@ -12,13 +12,10 @@ class Config:
 
     # Diretórios
     BASE_DIR: Path = Path("output")
-    BASE_DIRTILES_DIR: Path = BASE_DIR / "tiles"
     TILES_DIR: Path = BASE_DIR / "tiles" / "src"
     RAW_DIR: Path = BASE_DIR / "tiles" / "raw"
     AVERAGE_DIR: Path = BASE_DIR / "tiles" / "average"
     NORMALIZED_DIR: Path = BASE_DIR / "tiles" / "normalized"
-    # Onde as imagens classificadas serão salvas
-    CLASSIFIED_DIR: Path = BASE_DIR / "tiles" / "classified"
 
     # Diretórios para etapas posteriores
     FEATURES_DIR: Path = BASE_DIR / "features"
@@ -32,6 +29,9 @@ class Config:
 
     # Etapa de classificação
     CLASSIFIER_MODEL_PATH: Path = BASE_DIR / "models" / "classifier_model.pkl"
+    # Critérios do ThresholdClassifier (tecido vs. fundo)
+    TISSUE_THRESHOLD_VALUE: int = 220    # pixels <= valor são considerados tecido
+    TISSUE_MIN_BLACK_RATIO: float = 0.1  # proporção mínima de tecido p/ tile válido
 
     # Onde as imagens classificadas serão salvas
     CLASSIFIED_DIR: Path = BASE_DIR / "tmp" / "classified"
@@ -50,7 +50,7 @@ class Config:
     # Etapa de detecção de keypoints
     DETECTION_ALGORITHM: str = "sift"
     DETECTION_N_JOBS: int = -1
-    FEATURES_DIR: Path = BASE_DIR / "features"
+    DETECTION_MIN_KEYPOINTS: int = 4     # mínimo de keypoints p/ registrar o tile
     KEYPOINTS_ZARR_STORE: Path = FEATURES_DIR / "features.zarr"
 
     # Etapa de matching
@@ -58,6 +58,12 @@ class Config:
     MATCHER: str = "bf"
     MATCHING_RATIO_THRESH: float = 0.5
     MATCHING_N_JOBS = -1
+    MATCHING_MIN_MATCHES: int = 4          # mínimo de matches p/ tentar RANSAC
+    # Parâmetros do RANSAC (cv2.estimateAffinePartial2D)
+    RANSAC_REPROJ_THRESHOLD: float = 5.0   # tolerância de reprojeção (px)
+    RANSAC_MAX_ITERS: int = 2000
+    RANSAC_CONFIDENCE: float = 0.99
+    RANSAC_REFINE_ITERS: int = 10
 
     # Etapa de criação do canvas
     CANVAS_OUTPUT_PATH: Path = BASE_DIR / "tmp" / "canvas"
@@ -73,6 +79,8 @@ class Config:
     CANVAS_GAP: int = 100
     CANVAS_MAX_MATCHES_TO_DRAW = 20
     CANVAS_FILL_VALUE: int = 255
+    CANVAS_PREVIEW_MAX_DIM: int = 4000  # dimensão máx. (px) do preview JPG (subamostragem)
+    CANVAS_TIFF_TILE: int = 256         # tamanho do tile (px) na escrita do BigTIFF
 
     # limites conservadores (ajustáveis)
     MAX_SHIFT: float = 2000.0          # limite duro do vetor

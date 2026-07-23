@@ -32,7 +32,7 @@ def process_tile(algorithm, tile, valid_tiles):
 
     keypoints, descriptors = detector.detect_and_compute(img)
 
-    if keypoints and len(keypoints) > 4:
+    if keypoints and len(keypoints) > Config.DETECTION_MIN_KEYPOINTS:
         kp_array = np.array(
             [
                 [
