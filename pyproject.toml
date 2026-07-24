@@ -12,3 +12,8 @@ ignore_init_method = true
 ignore-init-module = true
 ignore-module = true
 verbosity = 2
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 120
+addopts = "-v --tb=short"
