@@ -233,11 +233,32 @@ def match():
 
     logger.info(f"Total de pares únicos de vizinhos: {len(tile_pairs)}")
 
+    # --- Retomada incremental ---
+    # Pula pares cujo arquivo de output zarr já existe e é não-vazio.
+    pairs_sorted = sorted(tile_pairs)
+    pairs_to_process = []
+    skipped = 0
+    for tile_a, tile_b in pairs_sorted:
+        match_filename = f"{tile_a}__{tile_b}.zarr"
+        output_path = Config.MATCHING_ZARR_PATH / match_filename
+        if output_path.exists():
+            skipped += 1
+        else:
+            pairs_to_process.append((tile_a, tile_b))
+
+    if skipped:
+        logger.info(f"Retomada incremental: {skipped} pares já processados. Pulando.")
+    logger.info(f"Pares a processar: {len(pairs_to_process)} de {len(tile_pairs)} totais.")
+
+    if not pairs_to_process:
+        logger.info("Todos os pares já foram processados. Nada a fazer.")
+        return
+
     total_salvos = Parallel(n_jobs=Config.MATCHING_N_JOBS)(
-        delayed(match_pair)(tile_a, tile_b) for tile_a, tile_b in sorted(tile_pairs)
+        delayed(match_pair)(tile_a, tile_b) for tile_a, tile_b in pairs_to_process
     )
 
-    logger.info(f"\n[FIM] Total de matches salvos: {sum(total_salvos)}")
+    logger.info(f"[FIM] Total de matches salvos nesta execução: {sum(total_salvos)}")
 
 
 if __name__ == "__main__":

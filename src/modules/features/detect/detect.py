@@ -99,18 +99,36 @@ def detect():
 
     tiles = dataset_metadata
 
+    # --- Retomada incremental ---
+    # Se o zarr já existe, reabre em modo append e pula tiles já processados.
+    zarr_path = Config.KEYPOINTS_ZARR_STORE
+    existing_tiles: set = set()
+    if zarr_path.exists():
+        zarr_store = zarr.open(zarr_path, mode="r+")
+        existing_tiles = set(zarr_store.group_keys())
+        logger.info(f"Retomada incremental: {len(existing_tiles)} tiles já processados. Pulando.")
+        tiles_to_process = [t for t in tiles if Path(t["name"]).stem not in existing_tiles]
+    else:
+        zarr_store = zarr.open(zarr_path, mode="w")
+        tiles_to_process = tiles
+
+    if not tiles_to_process:
+        logger.info("Todos os tiles já foram processados. Nada a fazer.")
+        return
+
+    logger.info(f"Tiles a processar: {len(tiles_to_process)} de {len(tiles)} totais.")
+
     if Config.DETECTION_N_JOBS == 1:
         results = [
             process_tile(Config.DETECTION_ALGORITHM, tile, valid_tiles)
-            for tile in tiles
+            for tile in tiles_to_process
         ]
     else:
         results = Parallel(n_jobs=Config.DETECTION_N_JOBS)(
             delayed(process_tile)(Config.DETECTION_ALGORITHM, tile, valid_tiles)
-            for tile in tiles
+            for tile in tiles_to_process
         )
 
-    zarr_store = zarr.open(Config.KEYPOINTS_ZARR_STORE, mode="w")
     save_to_zarr(zarr_store, results)
 
     end = perf_counter()
