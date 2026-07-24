@@ -10,6 +10,10 @@ class Config:
         ext.lower() for ext in [".png", ".jpg", ".jpeg", ".tif", ".tiff"]
     ]
 
+    # Nomenclatura canônica de tiles (usada pelo módulo de renomeação)
+    TILE_DEFAULT_ZP: int = 1        # z-plane padrão quando ausente no nome original
+    TILE_PREFIX_DIGITS: int = 5     # dígitos do prefixo sequencial (ex.: 00001)
+
     # Diretórios
     BASE_DIR: Path = Path("output")
     TILES_DIR: Path = BASE_DIR / "tiles" / "src"
