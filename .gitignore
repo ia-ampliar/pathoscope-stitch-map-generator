@@ -180,3 +180,6 @@ output/
 
 # VS Code settings
 .vscode/
+
+# Kiro settings
+.kiro/
