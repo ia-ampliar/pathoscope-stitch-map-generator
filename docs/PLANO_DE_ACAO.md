@@ -87,7 +87,7 @@
 - **Intervenção:** substituir `print` por `logging` com formato/nível padronizados; centralizar a configuração de logging.
 - **Critério de aceitação:** todas as etapas emitem logs pelo mesmo mecanismo, com nível configurável.
 
-### ⬜ H2-02 — Contratos de dados entre etapas (validação de schema)
+### ✅ H2-02 — Contratos de dados entre etapas (validação de schema)
 - **Tipo:** `fato` · **Impacto:** Médio · **Esforço:** Médio
 - **Problema:** a comunicação entre etapas é 100% por disco (pickle/zarr/json/npy/memmap) sem validação de esquema; leituras assumem estrutura implicitamente.
 - **Evidência:** `src/modules/graph/geograph.py:165-166` lê `attrs["translation_matrix"]` sem checagem de versão/forma; leitura de `dataset.json`/`valid_tiles.json` sem schema.
@@ -109,14 +109,14 @@
 - **Intervenção:** escrever o BigTIFF por tiles/blocos com `tifffile`; gerar o preview por downsampling em streaming (sem carregar o mosaico inteiro).
 - **Critério de aceitação:** pico de RAM na exportação passa a ser O(bloco), não O(mosaico); exportação funciona para canvas maior que a RAM disponível.
 
-### ⬜ H2-05 — Retomada incremental por etapa
+### ✅ H2-05 — Retomada incremental por etapa
 - **Tipo:** `fato` · **Impacto:** Médio · **Esforço:** Médio
 - **Problema:** etapas recomputam do zero; não há detecção de trabalho já feito.
 - **Evidência:** `src/modules/features/detect/detect.py:113` (abre zarr em modo `"w"`); `src/modules/features/match/match.py:168` (recria diretório de matches).
 - **Intervenção:** pular pares/tiles cujos artefatos já existem e estão íntegros (com flag `--force` para recomputar).
 - **Critério de aceitação:** reexecutar `match`/`detect` após conclusão parcial processa apenas o que falta.
 
-### ⬜ H2-06 — Suíte de testes + CI
+### ✅ H2-06 — Suíte de testes + CI
 - **Tipo:** `fato` · **Impacto:** Alto · **Esforço:** Alto
 - **Problema:** não há testes nem integração contínua.
 - **Evidência:** ausência de `tests/` e de qualquer `import pytest`; ausência de `.github/`; linters já configurados em `pyproject.toml` (black/isort/flake8/interrogate).
@@ -181,11 +181,11 @@
 
 **Horizonte 2**
 - [x] H2-01 Padronizar logging
-- [ ] H2-02 Contratos de dados com validação de schema
+- [x] H2-02 Contratos de dados com validação de schema
 - [x] H2-03 Otimizar I/O do matching
 - [x] H2-04 Exportação do canvas por blocos
-- [ ] H2-05 Retomada incremental por etapa
-- [ ] H2-06 Suíte de testes + CI
+- [x] H2-05 Retomada incremental por etapa
+- [x] H2-06 Suíte de testes + CI
 
 **Horizonte 3**
 - [ ] H3-01 Blending no canvas
