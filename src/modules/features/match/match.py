@@ -1,6 +1,5 @@
 import re
 import time
-from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -19,10 +18,13 @@ logger = logging.getLogger(__name__)
 
 # --- Singletons por processo (worker) ---------------------------------------
 # Em execução paralela (joblib/loky), cada worker é um processo separado e
-# inicializa seu próprio store/matcher sob demanda. Isso evita reabrir o store
-# Zarr e reinstanciar o matcher a cada par de tiles.
+# inicializa seu próprio store/matcher/cache sob demanda. Isso evita reabrir o
+# store Zarr e reinstanciar o matcher a cada par de tiles.
+# NOTA: não usar @lru_cache aqui — funções decoradas com lru_cache não são
+# picklable pelo loky e causam BrokenProcessPool.
 _STORE = None
 _MATCHER = None
+_KP_CACHE: dict = {}
 
 
 def _get_store():
@@ -43,6 +45,17 @@ def _get_matcher():
             ratio_thresh=Config.MATCHING_RATIO_THRESH,
         )
     return _MATCHER
+
+
+def _get_kp_desc(tile_name: str):
+    """Cache por processo via dict: cada tile é lido no máximo uma vez por worker.
+
+    Como cada tile participa de até 4 pares vizinhos, o cache elimina a
+    releitura redundante de keypoints/descritores do mesmo tile.
+    """
+    if tile_name not in _KP_CACHE:
+        _KP_CACHE[tile_name] = load_keypoints_and_descriptors(_get_store(), tile_name)
+    return _KP_CACHE[tile_name]
 
 
 def load_keypoints_and_descriptors(zarr_store, tile_name: str):
@@ -70,22 +83,12 @@ def load_keypoints_and_descriptors(zarr_store, tile_name: str):
     return keypoints, descriptors
 
 
-@lru_cache(maxsize=None)
-def _load_kp_desc_cached(tile_name: str):
-    """Cache por processo: cada tile é lido no máximo uma vez por worker.
-
-    Como cada tile participa de até 4 pares vizinhos, o cache elimina a
-    releitura redundante de keypoints/descritores do mesmo tile.
-    """
-    return load_keypoints_and_descriptors(_get_store(), tile_name)
-
-
 def match_pair(tile_a, tile_b) -> int:
     matcher = _get_matcher()
 
     try:
-        kp1, desc1 = _load_kp_desc_cached(tile_a)
-        kp2, desc2 = _load_kp_desc_cached(tile_b)
+        kp1, desc1 = _get_kp_desc(tile_a)
+        kp2, desc2 = _get_kp_desc(tile_b)
     except Exception as e:
         logger.error(f"Falha ao carregar dados: {tile_a} <-> {tile_b}. Erro: {e}")
         return 0
