@@ -40,7 +40,15 @@ python -m src.modules.initializer.initialize_structure
 
 Após a criação da estrutura de diretórios, insira os tiles em `output/tiles`
 
-## 3. Extração de metadados dos tiles
+## 3. Padronização dos nomes dos tiles
+
+Caso os tiles não estejam no padrão esperado (`tile_xN_yN_image.ext`), execute o módulo de renomeação para padronizá-los:
+
+```bash
+python -m src.modules.tile.rename
+```
+
+## 4. Extração de metadados dos tiles
 
 Para realizar a extração dos dados dos tiles (nome, caminho e coordenadas), execute o módulo tile.fetch
 
@@ -48,7 +56,7 @@ Para realizar a extração dos dados dos tiles (nome, caminho e coordenadas), ex
 python -m src.modules.tile.fetch.fetch
 ```
 
-## 4. Classificação dos tiles candidatos
+## 5. Classificação dos tiles candidatos
 
 Para realizar a classificação dos tiles candidatos, execute o módulo tile_classifier
 
@@ -56,7 +64,7 @@ Para realizar a classificação dos tiles candidatos, execute o módulo tile_cla
 python -m src.modules.tile.classify.classifier
 ```
 
-## 4. Geração do Grafo
+## 6. Geração do Grafo
 
 Para criar a imagem do grafo com nós e arestas indicando o posicionamento dos tiles assim como candidatos ou não, execute o módulo
 
@@ -64,7 +72,7 @@ Para criar a imagem do grafo com nós e arestas indicando o posicionamento dos t
 python -m src.modules.graph.graph
 ```
 
-## 5. Detecção de features (keypoints e descriptors)
+## 7. Detecção de features (keypoints e descriptors)
 
 Para realizar a detecção de features no dataset dos tiles (somente nos candidatos), execute o módulo
 
@@ -72,7 +80,7 @@ Para realizar a detecção de features no dataset dos tiles (somente nos candida
 python -m src.modules.features.detect.detect
 ```
 
-## 6. Realização dos Matches entre tiles
+## 8. Realização dos Matches entre tiles
 
 Para realizar o match entre os tiles execute o módulo
 
@@ -80,7 +88,7 @@ Para realizar o match entre os tiles execute o módulo
 python -m src.modules.features.match.match
 ```
 
-## 7. Criação do Canvas
+## 9. Criação do Canvas
 
 Para realizar a criação do canvas em branco (para ser preenchido posteriormente) execute o módulo
 
@@ -88,7 +96,7 @@ Para realizar a criação do canvas em branco (para ser preenchido posteriorment
 python -m src.modules.canvas.create
 ```
 
-## 8. Preenchimento do Canvas
+## 10. Preenchimento do Canvas
 
 Para inserir os tiles no canvas execute o módulo
 
@@ -102,7 +110,7 @@ Para também salvar uma versão JPG com resolução reduzida, passe o parâmetro
 python -m src.modules.canvas.populate --scale 0.1
 ```
 
-## 9. Desenho dos Matches
+## 11. Desenho dos Matches
 
 Para desenhar os matches no canvas execute o módulo
 
