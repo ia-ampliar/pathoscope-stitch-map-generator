@@ -96,10 +96,22 @@ Para inserir os tiles no canvas execute o módulo
 python -m src.modules.canvas.populate
 ```
 
+Para também salvar uma versão JPG com resolução reduzida, passe o parâmetro `--scale` com um fator entre 0.0 e 1.0:
+
+```bash
+python -m src.modules.canvas.populate --scale 0.1
+```
+
 ## 9. Desenho dos Matches
 
 Para desenhar os matches no canvas execute o módulo
 
 ```bash
 python -m src.modules.canvas.draw_matches
+```
+
+Para também salvar uma versão JPG com resolução reduzida, passe o parâmetro `--scale`:
+
+```bash
+python -m src.modules.canvas.draw_matches --scale 0.1
 ```

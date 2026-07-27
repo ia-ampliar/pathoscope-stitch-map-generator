@@ -1,3 +1,4 @@
+import argparse
 import re
 import time
 
@@ -9,7 +10,19 @@ from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
 
 
-def populate():
+def save_jpg_scaled(image: np.ndarray, output_path, scale: float):
+    """Salva uma versão reduzida do canvas em JPG."""
+    h, w = image.shape[:2]
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    # Converte RGB para BGR para salvar com OpenCV
+    resized_bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(output_path), resized_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    print(f"Canvas JPG ({new_w}x{new_h}) salvo em: {output_path}")
+
+
+def populate(scale: float = None):
     # Carrega shape e memmap do canvas
     canvas_shape = np.load(Config.CANVAS_SHAPE_PATH)
     canvas_memmap = np.memmap(
@@ -34,11 +47,7 @@ def populate():
         filename = tile_path.name
         x_idx, y_idx = extract_coordinates(filename, pattern)
 
-        # Converte para índices base-0
-        x_idx -= 1
-        y_idx -= 1
-
-        # Calcula a posição no canvas com GAP nas bordas
+        # Coordenadas já são base-0, calcula posição no canvas com GAP nas bordas
         start_y = Config.CANVAS_GAP + y_idx * (tile_h + Config.CANVAS_GAP)
         start_x = Config.CANVAS_GAP + x_idx * (tile_w + Config.CANVAS_GAP)
 
@@ -70,10 +79,25 @@ def populate():
 
     print(f"Canvas salvo em: {Config.CANVAS_POPULATED_PATH}")
 
+    # Salva versão JPG reduzida se --scale foi fornecido
+    if scale is not None:
+        save_jpg_scaled(canvas_memmap, Config.CANVAS_POPULATED_JPG_PATH, scale)
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Preenche o canvas com os tiles posicionados."
+    )
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=None,
+        help="Fator de escala (0.0 a 1.0) para salvar uma versão JPG reduzida do canvas.",
+    )
+    args = parser.parse_args()
+
     start_time = time.perf_counter()
-    populate()
+    populate(scale=args.scale)
     end_time = time.perf_counter()
     elapsed = end_time - start_time
     print(f"Tempo total de execução: {elapsed:.2f} segundos")

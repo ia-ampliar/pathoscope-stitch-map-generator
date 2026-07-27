@@ -33,7 +33,8 @@ def create_blank_canvas_shape_from_tiles(
     xs, ys = zip(*coords)
     max_x = max(xs)
     max_y = max(ys)
-    grid_size = (max_x, max_y)
+    # Coordenadas são base-0, então a quantidade de colunas/linhas é max + 1
+    grid_size = (max_x + 1, max_y + 1)
 
     sample_img = cv2.imread(str(image_files[0]))
     if sample_img is None:

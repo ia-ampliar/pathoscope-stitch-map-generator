@@ -42,6 +42,10 @@ class Config:
     CANVAS_CHUNK_SIZE: tuple = (1000, 1000, 3)  # Ajuste conforme seu hardware
     CANVAS_SHAPE_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_shape.npy"
     CANVAS_POPULATED_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_populated.tif"
+    CANVAS_POPULATED_JPG_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_populated.jpg"
     CANVAS_WITH_DRAW_MATCHES_PATH: Path = CANVAS_OUTPUT_PATH / "canvas_with_matches.tif"
+    CANVAS_WITH_DRAW_MATCHES_JPG_PATH: Path = (
+        CANVAS_OUTPUT_PATH / "canvas_with_matches.jpg"
+    )
     CANVAS_GAP: int = 100
     CANVAS_MAX_MATCHES_TO_DRAW = 20

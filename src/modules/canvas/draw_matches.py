@@ -1,3 +1,4 @@
+import argparse
 import re
 import time
 
@@ -8,6 +9,18 @@ import zarr
 
 from src.config.config import Config
 from src.utils.coordinates import extract_coordinates
+
+
+def save_jpg_scaled(image: np.ndarray, output_path, scale: float):
+    """Salva uma versão reduzida do canvas em JPG."""
+    h, w = image.shape[:2]
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    # Converte RGB para BGR para salvar com OpenCV
+    resized_bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(output_path), resized_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    print(f"Canvas JPG ({new_w}x{new_h}) salvo em: {output_path}")
 
 
 def draw_line(imagem, pt1, pt2, color):
@@ -26,7 +39,7 @@ def load_keypoints(zarr_store, tile_name):
     return keypoints
 
 
-def main():
+def main(scale: float = None):
     print("[INICIO] Desenhando matches a partir de arquivos Zarr...")
 
     canvas_shape = np.load(Config.CANVAS_SHAPE_PATH)
@@ -63,12 +76,12 @@ def main():
         xb, yb = extract_coordinates(tile_b, pattern)
 
         offset_a = (
-            (xa - 1) * (tile_w + Config.CANVAS_GAP) + Config.CANVAS_GAP,
-            (ya - 1) * (tile_h + Config.CANVAS_GAP) + Config.CANVAS_GAP,
+            xa * (tile_w + Config.CANVAS_GAP) + Config.CANVAS_GAP,
+            ya * (tile_h + Config.CANVAS_GAP) + Config.CANVAS_GAP,
         )
         offset_b = (
-            (xb - 1) * (tile_w + Config.CANVAS_GAP) + Config.CANVAS_GAP,
-            (yb - 1) * (tile_h + Config.CANVAS_GAP) + Config.CANVAS_GAP,
+            xb * (tile_w + Config.CANVAS_GAP) + Config.CANVAS_GAP,
+            yb * (tile_h + Config.CANVAS_GAP) + Config.CANVAS_GAP,
         )
 
         kps_a = load_keypoints(zarr_store, tile_a)
@@ -104,10 +117,25 @@ def main():
         f"[FIM] Matches desenhados e imagem salva em: {Config.CANVAS_WITH_DRAW_MATCHES_PATH}"
     )
 
+    # Salva versão JPG reduzida se --scale foi fornecido
+    if scale is not None:
+        save_jpg_scaled(canvas, Config.CANVAS_WITH_DRAW_MATCHES_JPG_PATH, scale)
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Desenha os matches no canvas preenchido."
+    )
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=None,
+        help="Fator de escala (0.0 a 1.0) para salvar uma versão JPG reduzida do canvas.",
+    )
+    args = parser.parse_args()
+
     start_time = time.perf_counter()
-    main()
+    main(scale=args.scale)
     end_time = time.perf_counter()
     elapsed = end_time - start_time
     print(f"Tempo total de execução: {elapsed:.2f} segundos")
